@@ -1,5 +1,5 @@
 # Global variables values - single source of truth
-region = "eu-central-1"
+region = "europe-west4"
 
 tags = {
     Environment = "Development"
