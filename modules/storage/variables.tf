@@ -23,3 +23,14 @@ variable "email" {
     description = "The default email"
     type        = string
 }
+
+variable "network_id" {
+    description = "VPC network ID for private service access peering"
+    type        = string
+}
+
+variable "db_tier" {
+    description = "Cloud SQL machine tier"
+    type        = string
+    default     = "db-g1-small"
+}

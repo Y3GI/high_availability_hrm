@@ -1,0 +1,79 @@
+name: Deploy Workflow
+
+on:
+    push:
+        branches:
+            - main
+        paths:
+            - 'env/**'
+            - 'modules/**'
+
+
+
+permissions:
+    id-token: write
+    contents: write
+    security-events: write
+
+env:
+    GOOGLE_REGION: ${{ vars.GOOGLE_REGION }}
+    GOOGLE_CLOUD_PROJECT: ${{ vars.GOOGLE_CLOUD_PROJECT }}
+    STATE_BUCKET: ${{ vars.STATE_BUCKET }}
+    ENV_NAME: ${{ vars.ENV_NAME }}
+
+jobs:
+    terraform:
+        name: Terragrunt Apply
+        runs-on: ubuntu-latest
+
+        defaults:
+            run:
+                working-directory: ${{ github.workspace }}/env/dev/
+
+        steps:
+            - name: Checkout Repository
+              uses: actions/checkout@v3
+
+            - name: Configure Google Credentials
+              uses: google-github-actions/auth@v2.0.0
+              with:
+                workload_identity_provider: ${{ secrets.GOOGLE_WIF_PROVIDER }}
+                service_account: ${{ secrets.GOOGLE_SA_EMAIL }}
+
+            - name: Terraform setup
+              uses: hashicorp/setup-terraform@v3
+              with:
+                terraform_wrapper: false
+
+            - name: Setup Terragrunt
+              uses: eLco/setup-terragrunt@v1
+              with:
+                terragrunt_version: "0.55.0"
+
+            - name: Terragrunt plan
+              run: terragrunt run-all plan --terragrunt-non-interactive
+
+            - name: Terragrunt apply
+              run: terragrunt run-all apply --terragrunt-non-interactive
+
+            - name: Get Security Outputs
+              id: tf_outputs
+              run: |
+                APP_SA_EMAIL=$(terragrunt output -raw app_sa_email --terragrunt-working-dir ${{ github.workspace }}/env/dev/security)
+                echo "app_sa_email=$APP_SA_EMAIL" >> $GITHUB_OUTPUT
+
+            - name: Generate KSA Manifest
+              run: |
+                export APP_SA_EMAIL=${{ steps.tf_outputs.outputs.app_sa_email }}
+                envsubst < ${{ github.workspace }}/k8s/apps/hrm/serviceaccount.yaml.tpl \
+                        > ${{ github.workspace }}/k8s/apps/hrm/serviceaccount.yaml
+
+            - name: Commit If Changes
+              run: |
+                git config user.name "github-actions[bot]"
+                git config user.email "github-actions[bot]@users.noreply.github.com"
+                git diff --quiet ${{ github.workspace }}/k8s/apps/hrm/serviceaccount.yaml || (
+                    git add ${{ github.workspace }}/k8s/apps/hrm/serviceaccount.yaml
+                    git commit -m "chore: update KSA annotation [skip ci]"
+                    git push
+                )

@@ -1,0 +1,54 @@
+name: Destroy Workflow
+
+on:
+    workflow_dispatch:
+        inputs:
+            environment:
+                description: 'Type "Destroy" to confirm the destruction of the environment'
+                required: true
+                default: 'NO'
+
+
+permissions:
+    id-token: write
+    contents: read
+    security-events: write
+
+env:
+    GOOGLE_REGION: ${{ vars.GOOGLE_REGION }}
+    GOOGLE_CLOUD_PROJECT: ${{ vars.GOOGLE_CLOUD_PROJECT }}
+    STATE_BUCKET: ${{ vars.STATE_BUCKET }}
+    ENV_NAME: ${{ vars.ENV_NAME }}
+
+jobs:
+    terraform:
+        name: Terragrunt Destroy
+        runs-on: ubuntu-latest
+        if: github.event.inputs.environment == 'Destroy'
+
+        defaults:
+            run:
+                working-directory: ${{ github.workspace }}/env/dev/
+
+        steps:
+            - name: Checkout Repository
+              uses: actions/checkout@v3
+
+            - name: Configure Google Credentials
+              uses: google-github-actions/auth@v2.0.0
+              with:
+                workload_identity_provider: ${{ secrets.GOOGLE_WIF_PROVIDER }}
+                service_account: ${{ secrets.GOOGLE_SA_EMAIL }}
+
+            - name: Terraform setup
+              uses: hashicorp/setup-terraform@v3
+              with:
+                terraform_wrapper: false
+
+            - name: Setup Terragrunt
+              uses: eLco/setup-terragrunt@v1
+              with:
+                terragrunt_version: "0.55.0"
+
+            - name: Terragrunt destroy
+              run: terragrunt run-all destroy --terragrunt-non-interactive
