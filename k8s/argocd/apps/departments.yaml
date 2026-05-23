@@ -1,30 +1,22 @@
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: hrm-app
+  name: department-namespaces
   namespace: argocd
   finalizers:
     - resources-finalizer.argocd.argoproj.io
-
-spec: 
+spec:
   project: hrm-platform
-
   source:
-    repoURL: https://github.com/Y3GI/high_availability_hrm/
+    repoURL: https://github.com/Y3GI/high_availability_hrm
     targetRevision: main
-    path: k8s/apps/hrm/
-    helm:
-      valueFiles: 
-        - values.yaml
-
-  destinations:
+    path: k8s/apps/departments
+  destination:
     server: https://kubernetes.defaul.svc
-    namespace: hrm
-
+    namespace: argocd
   syncPolicy:
     automated:
       prune: true
       selfHeal: true
     syncOptions:
       - CreateNamespace=true
-      - PrunePropagationPolicy=foreground

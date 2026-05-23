@@ -53,3 +53,9 @@ variable "domain" {
     description = "Domain for access to through iap"
     type        = string
 }
+
+variable "departments" {
+    description = "List of department namespaces to provision"
+    type        = list(string)
+    default     = ["software", "devops", "db-engineering"]
+}

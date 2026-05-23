@@ -8,8 +8,6 @@ on:
             - 'env/**'
             - 'modules/**'
 
-
-
 permissions:
     id-token: write
     contents: write
@@ -20,19 +18,19 @@ env:
     GOOGLE_CLOUD_PROJECT: ${{ vars.GOOGLE_CLOUD_PROJECT }}
     STATE_BUCKET: ${{ vars.STATE_BUCKET }}
     ENV_NAME: ${{ vars.ENV_NAME }}
+    CLUSTER_NAME: ${{ vars.CLUSTER_NAME }}
 
 jobs:
-    terraform:
+    deploy:
         name: Terragrunt Apply
         runs-on: ubuntu-latest
-
         defaults:
             run:
-                working-directory: ${{ github.workspace }}/env/dev/
+              working-directory: ${{ github.workspace }}/env/dev/
 
         steps:
             - name: Checkout Repository
-              uses: actions/checkout@v3
+              uses: actions/checkout@v4
 
             - name: Configure Google Credentials
               uses: google-github-actions/auth@v2.0.0
@@ -56,24 +54,81 @@ jobs:
             - name: Terragrunt apply
               run: terragrunt run-all apply --terragrunt-non-interactive
 
+            - name: Get Cluster Credentials
+              uses: google-github-actions/get-gke-credentials@v3
+              with:
+                cluster_name: ${{ vars.CLUSTER_NAME }}
+                location: ${{ vars.GOOGLE_REGION }}
+
+            - name: Install ArgoCD
+              run: |
+                kubectl create namespace argocd --dry-run=client -o yaml | kubectl apply -f -
+                kubectl get deployment argocd-server -n argocd 2>/dev/null || \
+                kubectl apply -n argocd \
+                  -f https://raw.githubusercontent.com/argoproj/argo-cd/v2.10.0/manifests/install.yaml
+                kubectl wait --for=condition=available deployment/argocd-server \
+                  -n argocd --timeout=120s
+
+            - name: Apply ArgoCD configs
+              run: |
+                kubectl apply -f ${{ github.workspace }}/k8s/argocd/project.yaml
+                kubectl apply -f ${{ github.workspace }}/k8s/argocd/apps/
+
             - name: Get Security Outputs
               id: tf_outputs
+              working-directory: ${{ github.workspace }}/env/dev/security
               run: |
-                APP_SA_EMAIL=$(terragrunt output -raw app_sa_email --terragrunt-working-dir ${{ github.workspace }}/env/dev/security)
-                echo "app_sa_email=$APP_SA_EMAIL" >> $GITHUB_OUTPUT
+                echo "app_sa_email=$(terragrunt output -raw app_sa_email)" >> $GITHUB_OUTPUT
+                echo "iap_client_id=$(terragrunt output -raw iap_client_id)" >> $GITHUB_OUTPUT
+                echo "iap_client_secret=$(terragrunt output -raw iap_client_secret)" >> $GITHUB_OUTPUT
+                echo "instance_connection_name=$(terragrunt output -raw instance_connection_name)" >> $GITHUB_OUTPUT
 
-            - name: Generate KSA Manifest
+            - name: Generate Helm values from template
               run: |
                 export APP_SA_EMAIL=${{ steps.tf_outputs.outputs.app_sa_email }}
-                envsubst < ${{ github.workspace }}/k8s/apps/hrm/serviceaccount.yaml.tpl \
-                        > ${{ github.workspace }}/k8s/apps/hrm/serviceaccount.yaml
+                export INSTANCE_CONNECTION_NAME=${{ steps.tf_outputs.outputs.instance_connection_name }}
+                export GOOGLE_CLOUD_PROJECT=${{ vars.GOOGLE_CLOUD_PROJECT }}
+                envsubst < ${{ github.workspace }}/k8s/apps/hrm/values.yaml.tpl \
+                        > ${{ github.workspace }}/k8s/apps/hrm/values.yaml
 
-            - name: Commit If Changes
+            - name: Generate department service accounts
+              run: |
+                export GOOGLE_CLOUD_PROJECT=${{ vars.GOOGLE_CLOUD_PROJECT }}
+                export ENV=${{ vars.ENV_NAME }}
+                for dept in software devops db-engineering; do
+                  envsubst < ${{ github.workspace }}/k8s/apps/departments/$dept/serviceaccount.yaml.tpl \
+                          > ${{ github.workspace }}/k8s/apps/departments/$dept/serviceaccount.yaml
+                done
+            
+            - name: Create IAP secret in cluster
+              run: |
+                kubectl create namespace hrm --dry-run=client -o yaml | kubectl apply -f -
+                kubectl create secret generic iap-oauth-secret \
+                  --from-literal=client_id=${{ steps.tf_outputs.outputs.iap_client_id }} \
+                  --from-literal=client_secret=${{ steps.tf_outputs.outputs.iap_client_secret }} \
+                  --namespace hrm \
+                  --dry-run=client -o yaml | kubectl apply -f -
+
+            - name: Create DB secret in cluster
+              working-directory: ${{ github.workspace }}/env/dev/storage
+              run: |
+                DB_NAME=$(terragrunt output -raw db_name)
+                DB_USER=$(terragrunt output -raw db_user)
+                kubectl create secret generic hrm-db-secret \
+                --from-literal=db_name=$DB_NAME \
+                --from-literal=db_user=$DB_USER \
+                --namespace hrm \
+                --dry-run=client -o yaml | kubectl apply -f -
+
+            - name: Commit generated files if changed
               run: |
                 git config user.name "github-actions[bot]"
                 git config user.email "github-actions[bot]@users.noreply.github.com"
-                git diff --quiet ${{ github.workspace }}/k8s/apps/hrm/serviceaccount.yaml || (
-                    git add ${{ github.workspace }}/k8s/apps/hrm/serviceaccount.yaml
-                    git commit -m "chore: update KSA annotation [skip ci]"
-                    git push
+                git add ${{ github.workspace }}/k8s/apps/hrm/values.yaml \
+                        ${{ github.workspace }}/k8s/apps/departments/software/serviceaccount.yaml \
+                        ${{ github.workspace }}/k8s/apps/departments/devops/serviceaccount.yaml \
+                        ${{ github.workspace }}/k8s/apps/departments/db-engineering/serviceaccount.yaml
+                git diff --staged --quiet || (
+                  git commit -m "chore: update generated manifests [skip ci]"
+                  git push
                 )

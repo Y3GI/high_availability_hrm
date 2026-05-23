@@ -38,3 +38,6 @@ override.tf.json
 .terraformrc
 terraform.rc
 .DS_Store
+
+k8s/apps/departments/*/serviceaccount.yaml
+k8s/apps/hrm/values.yaml

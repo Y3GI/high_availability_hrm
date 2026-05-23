@@ -1,0 +1,37 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: hrm-platform
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+
+spec:
+  description: HRM GitOps management platform
+
+  source:
+    repoURL: https://github.com/Y3GI/high_availability_hrm/
+    targetRevision: main
+    path: k8s/
+
+  destinations:
+    - server: https://kubernetes.defaul.svc
+      namespace: hrm
+    - server: https://kubernetes.defaul.svc
+      namespace: software
+    - server: https://kubernetes.defaul.svc
+      namespace: devops
+    - server: https://kubernetes.defaul.svc
+      namespace: db_engineering
+    - server: https://kubernetes.defaul.svc
+      namespace: argocd
+
+clusterResourceWhitelist:
+  - group: ''
+    kind: Namespace
+  - group: 'networking.k8s.io'
+    kind: NetworkPolicy
+
+namespaceResourcesWhitelist:
+  - group: '*'
+    kind: '*'

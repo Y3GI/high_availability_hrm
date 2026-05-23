@@ -16,12 +16,12 @@ resource "google_iap_web_iam_member" "iap_access" {
 }
 
 resource "google_compute_global_address" "hrm_ingress_ip" {
-    name    = "${var.env}-hrm-ingress-ip"
+    name    = "hrm-ingress-ip"
     project = var.project_id
 }
 
 resource "google_compute_managed_ssl_certificate" "hrm_cert" {
-    name    = "${var.env}-hrm-cert"
+    name    = "hrm-cert"
     project = var.project_id
 
     managed {

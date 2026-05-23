@@ -1,0 +1,34 @@
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: department-workspace
+  namespace: argocd
+spec:
+  generators:
+    - git:
+      repoURL: https://github.com/Y3GI/high_availability_hrm/
+      revision: main
+      directories:
+        - path: k8s/workspaces/*/*
+  template:
+    metadata:
+      name: '{{path.basenameNormalized}}'
+      namespace: argocd
+      finalizers:
+        - resources-finalizer.argocd.argoproj.io
+    spec:
+      project: hrm-platform
+      source:
+        repoURL: https://github.com/Y3GI/high_availability_hrm/
+        targetRevision: main
+        path: '{{path}}'
+      destination:
+        server: https://kubernetes.defaul.svc
+        namespace: '{{path[1]}}'
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        syncOptions:
+          - CreateNamespace=true
+

@@ -24,3 +24,7 @@ output "private_ip" {
     value     = google_sql_database_instance.main.private_ip_address
     sensitive = true
 }
+
+output "artifact_registry_url" {
+    value = "${var.region}-docker.pkg.dev/${var.project_id}/hrm"
+}

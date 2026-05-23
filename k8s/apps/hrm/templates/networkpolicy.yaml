@@ -1,0 +1,30 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: hrm-network-policy
+  namespace: {{ .Values.namespace }}
+spec:
+  podSelector:
+    matchLabels:
+      app: hrm
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from: 
+        - ipBlock:
+            cidr: 130.211.0.0/22
+        - ipBlock:
+            cidr: 35.191.0.0/16
+  egress:
+    - to:
+        - ipBlock:
+            cidr: 10.10.0.0/16
+      ports:
+        - protocol: TCP
+          port: 5432
+    - to: 
+        - namespaceSelector: {}
+      ports:
+        - protocol: UDP
+          port: 53

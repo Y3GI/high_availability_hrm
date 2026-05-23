@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: devops
+  labels:
+    app: hrm-platform
+    department: devops
+    managed-by: argocd

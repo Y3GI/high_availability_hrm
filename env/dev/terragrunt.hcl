@@ -2,7 +2,7 @@ locals {
     env             = "dev"
     project_id      = get_env("GOOGLE_CLOUD_PROJECT")
     region          = "europe-west4"
-    email = "547283@student.fontys.nl"
+    email           = "547283@student.fontys.nl"
     tags = {
         Environment = "Development"
         Owner       = "Boyan Stefanov"
