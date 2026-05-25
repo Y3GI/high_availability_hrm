@@ -9,10 +9,8 @@ metadata:
 spec:
   description: HRM GitOps management platform
 
-  source:
-    repoURL: https://github.com/Y3GI/high_availability_hrm/
-    targetRevision: main
-    path: k8s/
+  sourceRepos:
+    - https://github.com/Y3GI/high_availability_hrm/
 
   destinations:
     - server: https://kubernetes.default.svc
@@ -26,12 +24,12 @@ spec:
     - server: https://kubernetes.default.svc
       namespace: argocd
 
-clusterResourceWhitelist:
-  - group: ''
-    kind: Namespace
-  - group: 'networking.k8s.io'
-    kind: NetworkPolicy
+  clusterResourceWhitelist:
+    - group: ''
+      kind: Namespace
+    - group: 'networking.k8s.io'
+      kind: NetworkPolicy
 
-namespaceResourcesWhitelist:
-  - group: '*'
-    kind: '*'
+  namespaceResourceWhitelist:
+    - group: '*'
+      kind: '*'
