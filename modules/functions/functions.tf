@@ -8,7 +8,7 @@ resource "google_storage_bucket" "function_source" {
 
 data "archive_file" "function_zip" {
     type        = "zip"
-    source_dir  = "${path_module}/source"
+    source_dir  = "${path.module}/source"
     output_path = "/tmp/hrm-function.zip"
 }
 

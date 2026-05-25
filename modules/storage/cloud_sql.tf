@@ -20,9 +20,7 @@ resource "google_compute_global_address" "private_ip_range" {
     network         = var.network_id
 }
 
-resource "google_service_networking_api" "private_vpc_connection" {
-    provider                = google
-
+resource "google_service_networking_connection" "private_vpc_connection" {
     service                 = "servicenetworking.googleapis.com"
     network                 = var.network_id
     reserved_peering_ranges = [ google_compute_global_address.private_ip_range.name ]
@@ -78,7 +76,7 @@ resource "google_sql_database_instance" "main" {
         }
     }
 
-    depends_on = [ google_service_networking_api.private_vpc_connection ]
+    depends_on = [ google_service_networking_connection.private_vpc_connection ]
 }
 
 resource "google_sql_database" "app_db" {
