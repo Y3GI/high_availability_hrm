@@ -11,6 +11,9 @@ spec:
     repoURL: https://github.com/Y3GI/high_availability_hrm
     targetRevision: main
     path: k8s/apps/departments
+    directory:
+      recurse: true
+      exclude: '**/*.yaml.tpl'
   destination:
     server: https://kubernetes.default.svc
     namespace: argocd

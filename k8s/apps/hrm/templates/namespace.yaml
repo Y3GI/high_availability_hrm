@@ -4,4 +4,4 @@ metadata:
     name: {{ .Values.namespace }}
     labels:
         app: hrm
-        manager-by: argocd
+        managed-by: argocd

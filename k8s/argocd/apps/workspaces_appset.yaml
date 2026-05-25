@@ -6,10 +6,10 @@ metadata:
 spec:
   generators:
     - git:
-      repoURL: https://github.com/Y3GI/high_availability_hrm/
-      revision: main
-      directories:
-        - path: k8s/workspaces/*/*
+        repoURL: https://github.com/Y3GI/high_availability_hrm/
+        revision: main
+        directories:
+          - path: k8s/workspaces/*/*
   template:
     metadata:
       name: '{{path.basenameNormalized}}'

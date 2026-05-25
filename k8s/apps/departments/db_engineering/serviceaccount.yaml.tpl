@@ -1,5 +1,5 @@
 apiVersion: v1
-kind: serviceAccount
+kind: ServiceAccount
 metadata:
     name: db-engineering-sa
     namespace: db-engineering

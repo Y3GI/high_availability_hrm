@@ -17,7 +17,7 @@ spec:
       valueFiles: 
         - values.yaml
 
-  destinations:
+  destination:
     server: https://kubernetes.default.svc
     namespace: hrm
 
