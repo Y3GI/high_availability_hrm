@@ -23,7 +23,10 @@ resource "google_cloudfunctions2_function" "hrm_onboarding" {
     project     = var.project_id
     location    = var.region
 
-    depends_on = [google_project_iam_member.build_sa_roles]
+    depends_on = [
+        google_project_iam_member.build_sa_roles,
+        google_secret_manager_secret_version.github_token_placeholder,
+    ]
 
     build_config {
         runtime         = "python311"
