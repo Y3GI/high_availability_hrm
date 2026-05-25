@@ -30,7 +30,7 @@ resource "google_cloudfunctions2_function" "hrm_onboarding" {
 
     build_config {
         runtime         = "python311"
-        entry_point     = "handle_hr_onboarding"
+        entry_point     = "handle_hr_event"
         service_account = google_service_account.build_sa.id
         source {
             storage_source {
