@@ -12,7 +12,7 @@ locals {
     k8s_namespace   = "hrm"
     k8s_sa_name     = "hrm-app"
 
-    domain          = "hrm.domain.com"
+    domain          = "cs3-hrm-app.duckdns.org"
 }
 
 generate "provider" {
@@ -43,4 +43,7 @@ inputs = {
     project_id  = local.project_id
     env         = local.env
     region      = local.region
+    domain      = local.domain
+    email       = local.email
+    tags        = local.tags
 }

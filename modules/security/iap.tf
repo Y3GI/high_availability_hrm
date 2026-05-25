@@ -12,7 +12,7 @@ resource "google_iap_client" "default" {
 resource "google_iap_web_iam_member" "iap_access" {
     project         = var.project_id
     role            = "roles/iap.httpsResourceAccessor"
-    member          = "domain:yourdomain.com"
+    member          = "domain:${var.domain}"
 }
 
 resource "google_compute_global_address" "hrm_ingress_ip" {

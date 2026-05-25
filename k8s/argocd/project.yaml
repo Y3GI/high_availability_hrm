@@ -15,15 +15,15 @@ spec:
     path: k8s/
 
   destinations:
-    - server: https://kubernetes.defaul.svc
+    - server: https://kubernetes.default.svc
       namespace: hrm
-    - server: https://kubernetes.defaul.svc
+    - server: https://kubernetes.default.svc
       namespace: software
-    - server: https://kubernetes.defaul.svc
+    - server: https://kubernetes.default.svc
       namespace: devops
-    - server: https://kubernetes.defaul.svc
-      namespace: db_engineering
-    - server: https://kubernetes.defaul.svc
+    - server: https://kubernetes.default.svc
+      namespace: db-engineering
+    - server: https://kubernetes.default.svc
       namespace: argocd
 
 clusterResourceWhitelist:

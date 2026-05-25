@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>HRM Platform</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+           background: #f5f5f5; color: #333; }
+    header { background: #1a73e8; color: white; padding: 16px 32px;
+             display: flex; align-items: center; gap: 12px; }
+    header h1 { font-size: 20px; font-weight: 500; }
+    main { max-width: 960px; margin: 32px auto; padding: 0 16px; }
+    .card { background: white; border-radius: 8px; padding: 24px;
+            box-shadow: 0 1px 3px rgba(0,0,0,.1); margin-bottom: 24px; }
+    .card h2 { font-size: 16px; font-weight: 600; margin-bottom: 16px; color: #1a73e8; }
+    .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px; }
+    input, select { width: 100%; padding: 8px 12px; border: 1px solid #ddd;
+                    border-radius: 4px; font-size: 14px; }
+    button { padding: 8px 20px; background: #1a73e8; color: white; border: none;
+             border-radius: 4px; cursor: pointer; font-size: 14px; }
+    button:hover { background: #1557b0; }
+    button.danger { background: #d93025; }
+    button.danger:hover { background: #a50e0e; }
+    table { width: 100%; border-collapse: collapse; font-size: 14px; }
+    th { text-align: left; padding: 10px 12px; border-bottom: 2px solid #e0e0e0;
+         color: #666; font-weight: 600; }
+    td { padding: 10px 12px; border-bottom: 1px solid #f0f0f0; }
+    tr:hover td { background: #f8f9fa; }
+    .badge { padding: 2px 8px; border-radius: 12px; font-size: 12px; font-weight: 500; }
+    .badge.software { background: #e8f0fe; color: #1a73e8; }
+    .badge.devops { background: #fce8e6; color: #d93025; }
+    .badge.db { background: #e6f4ea; color: #188038; }
+    .status { color: #888; font-size: 13px; margin-top: 8px; }
+    .empty { text-align: center; color: #999; padding: 32px; }
+  </style>
+</head>
+<body>
+<header>
+  <svg width="24" height="24" viewBox="0 0 24 24" fill="white">
+    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
+  </svg>
+  <h1>HRM GitOps Platform</h1>
+</header>
+<main>
+  <div class="card">
+    <h2>Onboard Employee</h2>
+    <div class="form-row">
+      <input id="emp-id" placeholder="Employee ID (e.g. emp-001)" />
+      <input id="emp-name" placeholder="Full Name" />
+    </div>
+    <div class="form-row">
+      <input id="emp-email" placeholder="Email" type="email" />
+      <select id="emp-dept">
+        <option value="">Select Department</option>
+        <option value="software">Software</option>
+        <option value="devops">DevOps</option>
+        <option value="db-engineering">DB Engineering</option>
+      </select>
+    </div>
+    <button onclick="onboard()">Onboard Employee</button>
+    <p class="status" id="form-status"></p>
+  </div>
+
+  <div class="card">
+    <h2>Active Employees</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>ID</th><th>Name</th><th>Email</th>
+          <th>Department</th><th>Onboarded</th><th>Action</th>
+        </tr>
+      </thead>
+      <tbody id="employee-list">
+        <tr><td colspan="6" class="empty">Loading...</td></tr>
+      </tbody>
+    </table>
+  </div>
+</main>
+
+<script>
+  const deptClass = { software: 'software', devops: 'devops', 'db-engineering': 'db' };
+
+  async function loadEmployees() {
+    const resp = await fetch('/api/employees');
+    const employees = await resp.json();
+    const tbody = document.getElementById('employee-list');
+    if (!employees.length) {
+      tbody.innerHTML = '<tr><td colspan="6" class="empty">No active employees</td></tr>';
+      return;
+    }
+    tbody.innerHTML = employees.map(e => `
+      <tr>
+        <td>${e.employee_id}</td>
+        <td>${e.name}</td>
+        <td>${e.email}</td>
+        <td><span class="badge ${deptClass[e.department]}">${e.department}</span></td>
+        <td>${new Date(e.created_at).toLocaleDateString()}</td>
+        <td><button class="danger" onclick="offboard('${e.employee_id}')">Offboard</button></td>
+      </tr>
+    `).join('');
+  }
+
+  async function onboard() {
+    const status = document.getElementById('form-status');
+    const body = {
+      employee_id: document.getElementById('emp-id').value.trim(),
+      name:        document.getElementById('emp-name').value.trim(),
+      email:       document.getElementById('emp-email').value.trim(),
+      department:  document.getElementById('emp-dept').value,
+    };
+    if (!body.employee_id || !body.name || !body.email || !body.department) {
+      status.textContent = 'Please fill in all fields.';
+      return;
+    }
+    status.textContent = 'Provisioning workspace...';
+    try {
+      const resp = await fetch('/api/employees', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const data = await resp.json();
+      if (!resp.ok) throw new Error(data.detail);
+      status.textContent = `✓ ${body.name} onboarded. Workspace is being provisioned by ArgoCD.`;
+      loadEmployees();
+    } catch (e) {
+      status.textContent = `Error: ${e.message}`;
+    }
+  }
+
+  async function offboard(employeeId) {
+    if (!confirm(`Offboard ${employeeId}? Their workspace will be destroyed.`)) return;
+    try {
+      const resp = await fetch(`/api/employees/${employeeId}`, { method: 'DELETE' });
+      const data = await resp.json();
+      if (!resp.ok) throw new Error(data.detail);
+      loadEmployees();
+    } catch (e) {
+      alert(`Error: ${e.message}`);
+    }
+  }
+
+  loadEmployees();
+  setInterval(loadEmployees, 30000); // refresh every 30s
+</script>
+</body>
+</html>

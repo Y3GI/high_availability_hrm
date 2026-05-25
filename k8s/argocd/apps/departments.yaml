@@ -12,7 +12,7 @@ spec:
     targetRevision: main
     path: k8s/apps/departments
   destination:
-    server: https://kubernetes.defaul.svc
+    server: https://kubernetes.default.svc
     namespace: argocd
   syncPolicy:
     automated:

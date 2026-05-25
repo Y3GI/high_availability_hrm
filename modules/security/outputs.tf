@@ -9,8 +9,8 @@ output "iap_client_secret" {
 }
 
 output "ingress_ip" {
-    value       = google_compute_global_address.hrm_ingress_ip
-    sensitive   = true
+    description = "Global static IP for the HRM load balancer — point your DuckDNS domain here"
+    value       = google_compute_global_address.hrm_ingress_ip.address
 }
 
 output "app_sa_email" {

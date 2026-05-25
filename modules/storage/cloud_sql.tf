@@ -1,3 +1,16 @@
+terraform {
+  required_providers {
+    null = {
+      source  = "hashicorp/null"
+      version = "~> 3.0"
+    }
+    random = {
+      source  = "hashicorp/random"
+      version = "~> 3.0"
+    }
+  }
+}
+
 resource "google_compute_global_address" "private_ip_range" {
     name            = "${var.env}-sql-private-range"
     project         = var.project_id
@@ -73,3 +86,45 @@ resource "google_sql_database" "app_db" {
     project     = var.project_id
     instance    = google_sql_database_instance.main.name
 }
+
+resource "null_resource" "db_init" {
+    depends_on = [ 
+        google_sql_database.app_db,
+        google_sql_database_instance.main,
+        google_sql_user.app_user
+    ]
+
+    triggers = {
+        sql_hash = filemd5("${path.module}/init.sql")
+    }
+
+    provisioner "local-exec" {
+    command = <<-EOT
+      # Download Cloud SQL Auth Proxy
+      curl -o cloud-sql-proxy \
+        https://storage.googleapis.com/cloud-sql-connectors/cloud-sql-proxy/v2.8.0/cloud-sql-proxy.linux.amd64
+      chmod +x cloud-sql-proxy
+
+      # Start proxy in background
+      ./cloud-sql-proxy \
+        ${google_sql_database_instance.main.connection_name} \
+        --port=5433 &
+      PROXY_PID=$!
+
+      # Wait for proxy to be ready
+      sleep 5
+
+      # Run the init script
+      PGPASSWORD=${random_password.db_password.result} psql \
+        -h 127.0.0.1 \
+        -p 5433 \
+        -U ${google_sql_user.app_user.name} \
+        -d ${google_sql_database.app_db.name} \
+        -f ${path.module}/init.sql
+
+      # Clean up
+      kill $PROXY_PID
+    EOT
+  }
+}
+

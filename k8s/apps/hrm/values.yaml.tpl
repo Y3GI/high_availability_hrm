@@ -1,6 +1,7 @@
 namespace: hrm
-domain: hrm.domain.com
+domain: cs3-hrm-app.duckdns.org
 project: "$GOOGLE_CLOUD_PROJECT"
+cloudFunctionUrl: "$CLOUD_FUNCTION_URL"
 
 serviceAccount:
     name: hrm-app
@@ -11,8 +12,8 @@ iap:
 
 image: 
     repository: europe-west4-docker.pkg.dev/$GOOGLE_CLOUD_PROJECT/hrm/hrm-app
-    tag: latest
-    pullPolicy: Always
+    tag: "$IMAGE_TAG"
+    pullPolicy: IfNotPresent
 
 resources:
     requests:

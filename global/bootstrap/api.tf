@@ -5,14 +5,17 @@ locals {
         "sqladmin.googleapis.com",
         "iamcredentials.googleapis.com",
         "cloudresourcemanager.googleapis.com",
-        "iap.googleapis.com"
+        "iap.googleapis.com",
+        "cloudfunctions.googleapis.com",
+        "cloudbuild.googleapis.com",
+        "monitoring.googleapis.com"
     ]
 }
 
 resource "google_project_service" "enabled_apis" {
     for_each    = toset(local.gcp_apis)
 
-    project     = "${data.google_client_config.current.project}"
+    project     = var.project_id
     service     = each.key
     disable_on_destroy = false
 }

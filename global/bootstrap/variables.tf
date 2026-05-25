@@ -1,4 +1,9 @@
 # Common variables (sourced from global/variables.tfvars)
+variable "project_id" {
+    description = "The GCP project ID"
+    type        = string
+}
+
 variable "region" {
     description = "The region to deploy the resources in"
     type        = string

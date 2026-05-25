@@ -18,7 +18,7 @@ spec:
         - values.yaml
 
   destinations:
-    server: https://kubernetes.defaul.svc
+    server: https://kubernetes.default.svc
     namespace: hrm
 
   syncPolicy:

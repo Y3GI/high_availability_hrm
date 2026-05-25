@@ -1,3 +1,7 @@
+# REFERENCE ONLY — this file is not rendered directly.
+# The Cloud Function bundles its own copy of this template at modules/functions/source/workspace.yaml.tpl
+# Generated workspaces appear at k8s/workspaces/DEPARTMENT/EMPLOYEE_ID/workspace.yaml
+
 apiVersion: v1
 kind: Pod
 metadata:

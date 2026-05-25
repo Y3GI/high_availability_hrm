@@ -31,6 +31,17 @@ resource "google_container_cluster" "main_cluster"{
         }
     }
 
+    logging_config {
+        enable_components = ["SYSTEM_COMPONENTS", "WORKLOADS"]
+    }
+
+    monitoring_config {
+        enable_components = ["SYSTEM_COMPONENTS", "APISERVER", "WORKLOADS"]
+        managed_prometheus {
+            enabled = true
+        }
+    }
+
     datapath_provider = "ADVANCED_DATAPATH"
 
     release_channel {

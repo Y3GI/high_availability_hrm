@@ -23,3 +23,8 @@ variable "email" {
     description = "The default email"
     type        = string
 }
+
+variable "domain" {
+    description = "Application domain"
+    type        = string
+}
