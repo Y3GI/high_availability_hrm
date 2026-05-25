@@ -8,7 +8,12 @@ locals {
         "iap.googleapis.com",
         "cloudfunctions.googleapis.com",
         "cloudbuild.googleapis.com",
-        "monitoring.googleapis.com"
+        "monitoring.googleapis.com",
+        "logging.googleapis.com",
+        "secretmanager.googleapis.com",
+        "servicenetworking.googleapis.com",
+        "run.googleapis.com",
+        "artifactregistry.googleapis.com"
     ]
 }
 

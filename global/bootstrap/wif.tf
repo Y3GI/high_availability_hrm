@@ -6,9 +6,15 @@ resource "google_service_account" "github_actions_sa" {
     project         = "${var.project_id}"
 }
 
-resource "google_project_iam_member" "github_actions_admin" {
+resource "google_project_iam_member" "github_actions_editor" {
     project         = "${var.project_id}"
     role            = "roles/editor"
+    member          = "serviceAccount:${google_service_account.github_actions_sa.email}"
+}
+
+resource "google_project_iam_member" "github_actions_iam_admin" {
+    project         = "${var.project_id}"
+    role            = "roles/resourcemanager.projectIamAdmin"
     member          = "serviceAccount:${google_service_account.github_actions_sa.email}"
 }
 
