@@ -12,6 +12,10 @@ resource "google_container_cluster" "main_cluster"{
         machine_type = "e2-medium"
     }
 
+    lifecycle {
+        ignore_changes = [node_config]
+    }
+
     network     = var.network_id
     subnetwork  = var.subnet_id
 
