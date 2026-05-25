@@ -14,3 +14,14 @@ resource "google_project_iam_member" "function_sa_roles" {
     role    = each.value
     member  = "serviceAccount:${google_service_account.function_sa.email}"
 }
+
+resource "google_project_iam_member" "cloudbuild_sa_roles" {
+    for_each = toset([
+        "roles/artifactregistry.writer",
+        "roles/storage.objectViewer",
+        "roles/logging.logWriter",
+    ])
+    project = var.project_id
+    role    = each.value
+    member  = "serviceAccount:service-${data.google_project.project.number}@gcp-sa-cloudbuild.iam.gserviceaccount.com"
+}

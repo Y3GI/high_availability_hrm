@@ -18,6 +18,12 @@ resource "google_project_iam_member" "github_actions_iam_admin" {
     member          = "serviceAccount:${google_service_account.github_actions_sa.email}"
 }
 
+resource "google_project_iam_member" "github_actions_service_networking" {
+    project         = "${var.project_id}"
+    role            = "roles/servicenetworking.networksAdmin"
+    member          = "serviceAccount:${google_service_account.github_actions_sa.email}"
+}
+
 resource "google_iam_workload_identity_pool" "github_pool" {
     workload_identity_pool_id = "github-actions-pool"
     project         = "${var.project_id}"
