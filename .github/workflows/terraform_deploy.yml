@@ -7,6 +7,7 @@ on:
         paths:
             - 'env/**'
             - 'modules/**'
+            - 'hrm_app/**'
             - 'k8s/argocd/**'
             - 'k8s/apps/**'
     workflow_dispatch:
