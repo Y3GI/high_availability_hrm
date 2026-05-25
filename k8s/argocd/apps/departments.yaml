@@ -8,7 +8,7 @@ metadata:
 spec:
   project: hrm-platform
   source:
-    repoURL: https://github.com/Y3GI/high_availability_hrm
+    repoURL: https://github.com/Y3GI/high_availability_hrm/
     targetRevision: main
     path: k8s/apps/departments
     directory:
