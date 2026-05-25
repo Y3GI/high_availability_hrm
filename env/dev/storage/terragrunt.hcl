@@ -15,7 +15,7 @@ dependency "networking" {
 
     mock_outputs_allowed_terraform_commands = ["plan"]
     mock_outputs = {
-        network_id          = "mock-network-id"
+        network_id          = "projects/mock-project/global/networks/mock-network"
     }
 }
 

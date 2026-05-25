@@ -15,10 +15,10 @@ dependency "networking" {
 
     mock_outputs_allowed_terraform_commands = ["plan"]
     mock_outputs = {
-        network_id              = "mock-network-id"
-        subnet_id               = "mock-subnet-id"
-        pods_range_name         = "mock-pods-range-name"
-        services_range_name     = "mock-services-range-name"
+        network_id              = "projects/mock-project/global/networks/mock-network"
+        subnet_id               = "projects/mock-project/regions/europe-west4/subnetworks/mock-subnet"
+        pods_range_name         = "mock-pods-range"
+        services_range_name     = "mock-services-range"
     }
 }
 
