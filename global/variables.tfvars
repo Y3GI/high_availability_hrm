@@ -1,5 +1,5 @@
 # Global variables values - single source of truth
-project_id = "project-a036d07e-3bb1-4dc3-b21"
+project_id = "hrm-platform-and-environment"
 
 region = "europe-west4"
 
