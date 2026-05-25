@@ -8,7 +8,8 @@ locals {
         "roles/iam.serviceAccountAdmin",
         "roles/iam.serviceAccountUser",
         "roles/secretmanager.admin",
-        "roles/iap.admin"
+        "roles/iap.admin",
+        "roles/cloudfunctions.admin"
     ]
 }
 
