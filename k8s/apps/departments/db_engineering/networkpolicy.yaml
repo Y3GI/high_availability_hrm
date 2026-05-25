@@ -1,8 +1,8 @@
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
-  name: devops-policy
-  namespace: devops
+  name: db-engineering-policy
+  namespace: db-engineering
 spec:
   podSelector: {}
   policyTypes:
