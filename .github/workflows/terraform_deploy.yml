@@ -177,5 +177,6 @@ jobs:
                         ${{ github.workspace }}/k8s/apps/departments/db-engineering/serviceaccount.yaml
                 git diff --staged --quiet || (
                   git commit -m "chore: update generated manifests [skip ci]"
+                  git pull --rebase origin main
                   git push
                 )
