@@ -13,7 +13,7 @@ locals {
     k8s_sa_name     = "hrm-app"
 
     domain          = "cs3-hrm-app.duckdns.org"
-    iap_members     = ["user:547283@student.fontys.nl"]
+    iap_members     = ["user:boyanstefanovuni@gmail.com"]
 }
 
 generate "provider" {

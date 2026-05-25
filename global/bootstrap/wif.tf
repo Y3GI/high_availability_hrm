@@ -6,6 +6,7 @@ locals {
         "roles/resourcemanager.projectIamAdmin",
         "roles/servicenetworking.networksAdmin",
         "roles/iam.serviceAccountAdmin",
+        "roles/iam.serviceAccountUser",
         "roles/secretmanager.admin",
         "roles/iap.admin"
     ]

@@ -15,18 +15,20 @@ resource "google_project_iam_member" "function_sa_roles" {
     member  = "serviceAccount:${google_service_account.function_sa.email}"
 }
 
-data "google_project" "project" {
-    project_id = var.project_id
+resource "google_service_account" "build_sa" {
+    account_id      = "${var.env}-hrm-build-sa"
+    display_name    = "HRM Cloud Functions Build SA (${var.env})"
+    project         = var.project_id
 }
 
-resource "google_project_iam_member" "cloudbuild_sa_roles" {
+resource "google_project_iam_member" "build_sa_roles" {
     for_each = toset([
+        "roles/cloudbuild.builds.builder",
         "roles/artifactregistry.writer",
         "roles/storage.objectViewer",
         "roles/logging.logWriter",
-        "roles/cloudfunctions.developer",
     ])
     project = var.project_id
     role    = each.value
-    member  = "serviceAccount:${data.google_project.project.number}@cloudbuild.gserviceaccount.com"
+    member  = "serviceAccount:${google_service_account.build_sa.email}"
 }

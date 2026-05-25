@@ -23,11 +23,12 @@ resource "google_cloudfunctions2_function" "hrm_onboarding" {
     project     = var.project_id
     location    = var.region
 
-    depends_on = [google_project_iam_member.cloudbuild_sa_roles]
+    depends_on = [google_project_iam_member.build_sa_roles]
 
     build_config {
-        runtime     = "python311"
-        entry_point = "handle_hr_onboarding"
+        runtime         = "python311"
+        entry_point     = "handle_hr_onboarding"
+        service_account = google_service_account.build_sa.id
         source {
             storage_source {
                 bucket = google_storage_bucket.function_source.name

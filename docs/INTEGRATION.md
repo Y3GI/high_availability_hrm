@@ -10,7 +10,7 @@ Complete step-by-step guide to deploying the HRM GitOps Platform from scratch.
 2. [Bootstrap — Run Once Locally](#2-bootstrap--run-once-locally)
 3. [Workload Identity Federation Setup](#3-workload-identity-federation-setup)
 4. [GitHub Repository Setup](#4-github-repository-setup)
-5. [GitHub PAT Setup](#5-github-pat-setup)
+5. [IAP OAuth Client Setup](#5-iap-oauth-client-setup)
 6. [Pipeline Variables and Secrets](#6-pipeline-variables-and-secrets)
 7. [First Deployment](#7-first-deployment)
 8. [Post-Deploy Steps](#8-post-deploy-steps)
@@ -46,22 +46,23 @@ export GOOGLE_CLOUD_PROJECT=YOUR_PROJECT_ID
 
 ## 2. Bootstrap — Run Once Locally
 
-The bootstrap layer creates the GCS state bucket and Workload Identity Federation
-pool. This must be run **before** the CI/CD pipeline can function — Terraform needs
-these resources to store state and authenticate from GitHub Actions.
+The bootstrap layer creates the GCS state bucket, enables all required APIs, and
+provisions the Workload Identity Federation pool and CI/CD service account. This must
+be run **before** the CI/CD pipeline can function.
 
 ```bash
 cd global/bootstrap
 terraform init
-terraform plan
-terraform apply
+terraform plan -var="project_id=YOUR_PROJECT_ID"
+terraform apply -var="project_id=YOUR_PROJECT_ID"
 ```
 
 **What this creates:**
 - GCS state bucket: `dev-state-bucket-project-YOUR_PROJECT_ID`
-- WIF pool: `github-pool`
-- WIF provider: `github-provider` (trusts `token.actions.githubusercontent.com`)
-- CI/CD Service Account: `dev-cicd-sa@YOUR_PROJECT_ID.iam.gserviceaccount.com`
+- WIF pool: `github-actions-pool`
+- WIF provider: `github-provider` (trusts `token.actions.githubusercontent.com`, scoped to this repo only)
+- CI/CD Service Account: `github-actions-tf-sa@YOUR_PROJECT_ID.iam.gserviceaccount.com`
+- All required GCP APIs enabled (Compute, GKE, Cloud SQL, IAM, Secret Manager, etc.)
 
 **Read the outputs — you will need these for GitHub secrets and variables:**
 ```bash
@@ -72,6 +73,9 @@ terraform output state_bucket_name           # → STATE_BUCKET variable
 
 Bootstrap manages its own state locally. Do not delete the `terraform.tfstate`
 file in `global/bootstrap/` — it is needed to modify or destroy bootstrap resources.
+
+> **Re-apply bootstrap after any change to `wif.tf` or `api.tf`** using your personal
+> credentials, not the CI/CD pipeline.
 
 ---
 
@@ -90,21 +94,21 @@ Token sent to GCP STS (Security Token Service)
     ↓
 WIF Pool validates token against token.actions.githubusercontent.com
     ↓
-Attribute condition checked: assertion.repository == 'YOUR_ORG/YOUR_REPO'
+Attribute condition checked: assertion.repository == 'Y3GI/high_availability_hrm'
     ↓
 GCP issues a short-lived access token for the CI/CD SA (1 hour expiry)
     ↓
 Pipeline uses token for all GCP API calls — no stored credentials
 ```
 
-The attribute condition scopes trust to your specific repository.
+The attribute condition scopes trust to this specific repository.
 A fork of the repo cannot use your WIF pool.
 
 ### The `GOOGLE_WIF_PROVIDER` value
 
 Format:
 ```
-projects/PROJECT_NUMBER/locations/global/workloadIdentityPools/github-pool/providers/github-provider
+projects/PROJECT_NUMBER/locations/global/workloadIdentityPools/github-actions-pool/providers/github-provider
 ```
 
 This uses the **project number** (numeric), not the project ID string.
@@ -141,9 +145,52 @@ GitHub → Settings → Branches → Add rule for "main":
 
 ---
 
-## 5. Pipeline Variables and Secrets
+## 5. IAP OAuth Client Setup
 
-Configure in `GitHub → Settings → Secrets and variables → Actions`.
+Google shut down the IAP OAuth Admin API in March 2026. The OAuth brand and client
+**cannot be created via Terraform** — this is a one-time manual step in the GCP Console.
+
+### Step 1 — Configure the OAuth consent screen
+
+```
+GCP Console → APIs & Services → OAuth consent screen
+    User type: External
+    App name: HRM Onboarding Platform
+    User support email: your-email@example.com
+    Authorized domain: duckdns.org
+    Developer contact: your-email@example.com
+→ Save and Continue through all steps
+```
+
+### Step 2 — Create an OAuth 2.0 Client ID
+
+```
+GCP Console → APIs & Services → Credentials
+    → Create credentials → OAuth 2.0 Client ID
+    Application type: Web application
+    Name: HRM IAP Client
+→ Create
+```
+
+Copy the **Client ID** and **Client Secret** — they are shown only once.
+
+### Step 3 — Store as GitHub secrets
+
+Add both values in `GitHub → Settings → Secrets and variables → Actions`:
+
+| Secret Name | Value |
+|---|---|
+| `IAP_CLIENT_ID` | The Client ID from step 2 |
+| `IAP_CLIENT_SECRET` | The Client Secret from step 2 |
+
+The CI/CD pipeline reads these secrets directly when creating the `iap-oauth-secret`
+Kubernetes secret in the `hrm` namespace. They are never written to Terraform state.
+
+---
+
+## 6. Pipeline Variables and Secrets
+
+Configure all remaining values in `GitHub → Settings → Secrets and variables → Actions`.
 
 ### Secrets (encrypted, never visible after saving)
 
@@ -151,6 +198,8 @@ Configure in `GitHub → Settings → Secrets and variables → Actions`.
 |---|---|---|
 | `GOOGLE_WIF_PROVIDER` | WIF provider resource name | `terraform output workload_identity_provider` in `global/bootstrap` |
 | `GOOGLE_SA_EMAIL` | CI/CD SA email | `terraform output cicd_sa_email` in `global/bootstrap` |
+| `IAP_CLIENT_ID` | IAP OAuth client ID | GCP Console — see Section 5 |
+| `IAP_CLIENT_SECRET` | IAP OAuth client secret | GCP Console — see Section 5 |
 
 ### Variables (non-sensitive configuration)
 
@@ -164,7 +213,7 @@ Configure in `GitHub → Settings → Secrets and variables → Actions`.
 
 ---
 
-## 6. First Deployment
+## 7. First Deployment
 
 ### Step 1 — Trigger the deploy pipeline
 
@@ -176,40 +225,54 @@ git push origin main
 
 ### Step 2 — What the deploy pipeline does
 
+The pipeline runs three parallel jobs after infrastructure is ready:
+
+**Job 1 — Terragrunt Apply** (runs first):
 ```
-1.  Authenticate to GCP via WIF (no stored credentials)
-2.  terragrunt run-all plan  — validates all modules
-3.  terragrunt run-all apply — provisions infrastructure in DAG order:
-        networking → gke → storage → security → functions → monitoring
-4.  Pull codercom/code-server, retag, push to Artifact Registry (3 dept images)
-5.  Get GKE cluster credentials
-6.  Install ArgoCD in argocd namespace (skips if already installed)
-7.  Apply ArgoCD AppProject + Application manifests
-8.  Read Terraform outputs (app SA email, IAP credentials, Cloud SQL connection name,
-    Cloud Function URL)
-9.  Generate k8s/apps/hrm/values.yaml from values.yaml.tpl via envsubst
-10. Generate department serviceaccount.yaml files from .tpl files via envsubst
-11. Create iap-oauth-secret in hrm namespace
-12. Create hrm-db-secret in hrm namespace
-13. Commit generated files back to repo [skip ci]
+1. Authenticate to GCP via WIF (no stored credentials)
+2. terragrunt run-all plan  — validates all modules
+3. terragrunt run-all apply — provisions infrastructure in DAG order:
+       networking → gke → storage → security → functions → monitoring
 ```
 
-ArgoCD takes over after step 13 and syncs all manifests into the cluster.
+**Job 2 — Push Workspace Images** (after Job 1):
+```
+4. Pull codercom/code-server:latest
+5. Retag and push to Artifact Registry for each department:
+       software-workspace, devops-workspace, db-engineering-workspace
+```
+
+**Job 3 — Configure Cluster** (after Job 1, parallel with Job 2):
+```
+6.  Get GKE cluster credentials
+7.  Install ArgoCD in argocd namespace (idempotent — skips if already installed)
+8.  Apply ArgoCD AppProject + Application manifests
+9.  Read Terraform outputs: app SA email, Cloud SQL connection name, Cloud Function URL
+10. Read IAP credentials from GitHub secrets (IAP_CLIENT_ID, IAP_CLIENT_SECRET)
+11. Generate k8s/apps/hrm/values.yaml from values.yaml.tpl via envsubst
+12. Generate department serviceaccount.yaml files from .tpl files via envsubst
+13. Create iap-oauth-secret in hrm namespace
+14. Create hrm-db-secret in hrm namespace
+15. Commit generated manifests back to repo [skip ci]
+```
+
+ArgoCD takes over after step 15 and syncs all manifests into the cluster.
 
 **Expected duration:** 20–30 minutes on first run (Cloud SQL HA provisioning is the
 slowest step at ~10 minutes).
 
 ### Step 3 — Build the HRM app image
 
-The HRM app image is built by a separate workflow triggered by changes to `hrm-app/**`.
-On first deployment, trigger it manually or push a small change to `hrm-app/`:
+The HRM app image is built by a separate manually-triggered workflow.
 
-```bash
-touch hrm-app/.trigger
-git add hrm-app/.trigger
-git commit -m "chore: trigger initial app image build"
-git push origin main
 ```
+GitHub → Actions → Build & Push Images → Run workflow
+    Confirmation input: Deploy HRM
+→ Run workflow
+```
+
+This builds from `hrm_app/`, tags the image with both the git SHA and `latest`,
+and pushes to Artifact Registry. The SHA tag is what ArgoCD uses to track versions.
 
 ### Step 4 — Verify
 
@@ -233,15 +296,15 @@ kubectl get secret argocd-initial-admin-secret \
 
 ---
 
-## 7. Post-Deploy Steps
+## 8. Post-Deploy Steps
 
-### 7.1 GitHub PAT Setup
+### 8.1 GitHub PAT Setup
 
 The Cloud Function commits workspace manifests to this repository on behalf of HR.
 It authenticates using a GitHub Personal Access Token stored in GCP Secret Manager.
 The token is **never stored in code or pipeline variables**.
 
-### Create the PAT
+#### Create the PAT
 
 1. Go to `GitHub → Settings → Developer settings → Personal access tokens → Fine-grained tokens`
 2. Click **Generate new token**
@@ -254,7 +317,7 @@ The token is **never stored in code or pipeline variables**.
      - `Metadata: Read` — required by default
 4. Click **Generate token** — copy the value immediately, it is shown only once
 
-### Store the PAT in Secret Manager
+#### Store the PAT in Secret Manager
 
 Run this **after** the first `terraform apply` has completed (which creates the secret resource):
 
@@ -274,7 +337,7 @@ gcloud secrets versions access latest \
 The Cloud Function reads this secret at runtime via its Workload Identity SA.
 Without this the Cloud Function will fail to commit workspace manifests.
 
-### 7.2 Configure DNS
+### 8.2 Configure DNS
 
 Get the reserved load balancer IP:
 ```bash
@@ -282,26 +345,26 @@ cd env/dev/security
 terragrunt output ingress_ip
 ```
 
-Add a DNS A record at your domain registrar:
+Log in to [duckdns.org](https://www.duckdns.org) and set the IP for your subdomain:
 ```
-hrm.yourdomain.com → LOAD_BALANCER_IP
+cs3-hrm-app.duckdns.org → LOAD_BALANCER_IP
 ```
 
 The GCP-managed SSL certificate activates automatically within 10–20 minutes of
 DNS propagation. Certificate provisioning requires the domain to resolve correctly
 — do not skip this step if you want HTTPS.
 
-### 7.3 Verify monitoring
+### 8.3 Verify monitoring
 
 Navigate to `GCP Console → Monitoring → Dashboards` to confirm the HRM Platform
 dashboard was created. Alert policies are visible under `Monitoring → Alerting`.
 
-The uptime check pings `https://YOUR_DOMAIN/api/health` every 60 seconds.
+The uptime check pings `https://cs3-hrm-app.duckdns.org/api/health` every 60 seconds.
 It will show failures until DNS and the SSL certificate are configured.
 
 ---
 
-## 8. Destroy
+## 9. Destroy
 
 Destroy is intentionally manual and requires explicit confirmation.
 
@@ -319,6 +382,7 @@ GitHub → Actions → Destroy Workflow → Run workflow → type "Destroy" → 
 - The GCS state bucket (created by bootstrap, not managed by env/dev Terragrunt)
 - The WIF pool and CI/CD SA (created by bootstrap)
 - Bootstrap local state file
+- IAP OAuth client and consent screen (created manually)
 
 To fully clean up:
 ```bash
@@ -327,7 +391,7 @@ gsutil rm -r gs://dev-state-bucket-project-YOUR_PROJECT_ID
 
 # Destroy bootstrap resources
 cd global/bootstrap
-terraform destroy
+terraform destroy -var="project_id=YOUR_PROJECT_ID"
 ```
 
 **Warning:** Destroying Cloud SQL removes all data. Ensure backups are taken first
