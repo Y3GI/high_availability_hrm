@@ -7,8 +7,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
-RUN adduser --disabled-password --gecos '' appuser
-USER appuser
+RUN adduser --disabled-password --gecos '' --uid 1001 appuser
+USER 1001
 
 EXPOSE 8080
 
