@@ -58,5 +58,6 @@ resource "google_container_cluster" "main_cluster"{
         }
     }
 
-    enable_shielded_nodes = true
+    enable_shielded_nodes   = true
+    deletion_protection     = false #<----Set to true in Prod
 }

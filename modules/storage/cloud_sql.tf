@@ -32,7 +32,7 @@ resource "google_sql_database_instance" "main" {
     region              = var.region
     database_version    = "POSTGRES_15"
 
-    #deletion_protection = true <----Uncomment in Prod
+    deletion_protection = false #<----Set to true in Prod
 
     settings {
         tier                = var.db_tier
