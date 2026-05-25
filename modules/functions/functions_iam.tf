@@ -24,8 +24,9 @@ resource "google_project_iam_member" "cloudbuild_sa_roles" {
         "roles/artifactregistry.writer",
         "roles/storage.objectViewer",
         "roles/logging.logWriter",
+        "roles/cloudfunctions.developer",
     ])
     project = var.project_id
     role    = each.value
-    member  = "serviceAccount:service-${data.google_project.project.number}@gcp-sa-cloudbuild.iam.gserviceaccount.com"
+    member  = "serviceAccount:${data.google_project.project.number}@cloudbuild.gserviceaccount.com"
 }

@@ -1,13 +1,3 @@
-output "iap_client_id" {
-    value       = google_iap_client.default.client_id
-    sensitive   = true
-}
-
-output "iap_client_secret" {
-    value       = google_iap_client.default.secret
-    sensitive   = true
-}
-
 output "ingress_ip" {
     description = "Global static IP for the HRM load balancer — point your DuckDNS domain here"
     value       = google_compute_global_address.hrm_ingress_ip.address

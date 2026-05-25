@@ -1,18 +1,13 @@
-resource "google_iap_brand" "default" {
-    support_email       = var.email
-    application_title   = "HRM Onboarding Platform"
-    project             = var.project_id
-}
-
-resource "google_iap_client" "default" {
-    display_name    = "HRM IAP Client"
-    brand           = google_iap_brand.default.name
-}
+# IAP OAuth brand + client must be created once in GCP Console (API shut down Mar 2026):
+#   APIs & Services → OAuth consent screen → External → Configure
+#   APIs & Services → Credentials → Create OAuth 2.0 Client ID (Web application)
+# Store results as GitHub secrets: IAP_CLIENT_ID, IAP_CLIENT_SECRET
 
 resource "google_iap_web_iam_member" "iap_access" {
-    project         = var.project_id
-    role            = "roles/iap.httpsResourceAccessor"
-    member          = "domain:${var.domain}"
+    for_each    = toset(var.iap_members)
+    project     = var.project_id
+    role        = "roles/iap.httpsResourceAccessor"
+    member      = each.value
 }
 
 resource "google_compute_global_address" "hrm_ingress_ip" {

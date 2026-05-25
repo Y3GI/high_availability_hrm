@@ -123,8 +123,6 @@ jobs:
               working-directory: ${{ github.workspace }}/env/dev/security
               run: |
                 echo "app_sa_email=$(terragrunt output -raw app_sa_email)" >> $GITHUB_OUTPUT
-                echo "iap_client_id=$(terragrunt output -raw iap_client_id)" >> $GITHUB_OUTPUT
-                echo "iap_client_secret=$(terragrunt output -raw iap_client_secret)" >> $GITHUB_OUTPUT
                 echo "instance_connection_name=$(terragrunt output -raw instance_connection_name --terragrunt-working-dir ${{ github.workspace }}/env/dev/storage)" >> $GITHUB_OUTPUT
                 echo "cloud_function_url=$(terragrunt output -raw function_url --terragrunt-working-dir ${{ github.workspace }}/env/dev/functions)" >> $GITHUB_OUTPUT
 
@@ -151,8 +149,8 @@ jobs:
               run: |
                 kubectl create namespace hrm --dry-run=client -o yaml | kubectl apply -f -
                 kubectl create secret generic iap-oauth-secret \
-                  --from-literal=client_id=${{ steps.tf_outputs.outputs.iap_client_id }} \
-                  --from-literal=client_secret=${{ steps.tf_outputs.outputs.iap_client_secret }} \
+                  --from-literal=client_id=${{ secrets.IAP_CLIENT_ID }} \
+                  --from-literal=client_secret=${{ secrets.IAP_CLIENT_SECRET }} \
                   --namespace hrm \
                   --dry-run=client -o yaml | kubectl apply -f -
 

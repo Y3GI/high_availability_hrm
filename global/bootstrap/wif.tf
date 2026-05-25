@@ -1,26 +1,27 @@
 data "google_client_config" "current" {}
 
+locals {
+    wif_roles = [
+        "roles/editor",
+        "roles/resourcemanager.projectIamAdmin",
+        "roles/servicenetworking.networksAdmin",
+        "roles/iam.serviceAccountAdmin",
+        "roles/secretmanager.admin",
+        "roles/iap.admin"
+    ]
+}
+
 resource "google_service_account" "github_actions_sa" {
     account_id      = "github-actions-tf-sa"
     display_name    = "Github Actions Terraform Service sa"
     project         = "${var.project_id}"
 }
 
-resource "google_project_iam_member" "github_actions_editor" {
-    project         = "${var.project_id}"
-    role            = "roles/editor"
-    member          = "serviceAccount:${google_service_account.github_actions_sa.email}"
-}
+resource "google_project_iam_member" "github_actions_roles" {
+    for_each        = toset(local.wif_roles) 
 
-resource "google_project_iam_member" "github_actions_iam_admin" {
     project         = "${var.project_id}"
-    role            = "roles/resourcemanager.projectIamAdmin"
-    member          = "serviceAccount:${google_service_account.github_actions_sa.email}"
-}
-
-resource "google_project_iam_member" "github_actions_service_networking" {
-    project         = "${var.project_id}"
-    role            = "roles/servicenetworking.networksAdmin"
+    role            = each.key
     member          = "serviceAccount:${google_service_account.github_actions_sa.email}"
 }
 

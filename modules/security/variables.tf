@@ -59,3 +59,9 @@ variable "departments" {
     type        = list(string)
     default     = ["software", "devops", "db-engineering"]
 }
+
+variable "iap_members" {
+    description = "Principals granted IAP access, e.g. [\"user:alice@gmail.com\"]"
+    type        = list(string)
+    default     = []
+}

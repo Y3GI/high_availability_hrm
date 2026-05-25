@@ -41,4 +41,5 @@ inputs = {
     k8s_namespace           = local.root.locals.k8s_namespace
     k8s_sa_name             = local.root.locals.k8s_sa_name
     domain                  = local.root.locals.domain
+    iap_members             = local.root.locals.iap_members
 }
