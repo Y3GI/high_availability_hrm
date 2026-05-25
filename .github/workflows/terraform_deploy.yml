@@ -107,11 +107,10 @@ jobs:
             - name: Install ArgoCD
               run: |
                 kubectl create namespace argocd --dry-run=client -o yaml | kubectl apply -f -
-                kubectl get deployment argocd-server -n argocd 2>/dev/null || \
                 kubectl apply -n argocd \
                   -f https://raw.githubusercontent.com/argoproj/argo-cd/v2.10.0/manifests/install.yaml
                 kubectl wait --for=condition=available deployment/argocd-server \
-                  -n argocd --timeout=120s
+                  -n argocd --timeout=300s
 
             - name: Apply ArgoCD configs
               run: |
