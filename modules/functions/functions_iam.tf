@@ -32,3 +32,10 @@ resource "google_project_iam_member" "build_sa_roles" {
     role    = each.value
     member  = "serviceAccount:${google_service_account.build_sa.email}"
 }
+
+# IAM is eventually consistent — this pause lets storage.objectViewer propagate
+# to the gcf-v2-sources-* staging bucket before Cloud Build starts the function build.
+resource "time_sleep" "build_iam_propagation" {
+    depends_on      = [google_project_iam_member.build_sa_roles]
+    create_duration = "90s"
+}
