@@ -1,5 +1,5 @@
 # Global variables values - single source of truth
-project_id = "hrm-platform-and-environment"
+project_id = "fluent-fortress-497419-c5"
 
 region = "europe-west4"
 
