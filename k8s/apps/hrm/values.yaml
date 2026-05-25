@@ -1,0 +1,27 @@
+namespace: hrm
+domain: cs3-hrm-app.duckdns.org
+project: "fluent-fortress-497419-c5"
+cloudFunctionUrl: "https://dev-hrm-onboarding-function-fi6h74mw3q-ez.a.run.app"
+
+serviceAccount:
+    name: hrm-app
+    gcpServiceAccountEmail: "dev-hrm-app-sa@fluent-fortress-497419-c5.iam.gserviceaccount.com"
+
+iap:
+    secretName: iap-oauth-secret
+
+image: 
+    repository: europe-west4-docker.pkg.dev/fluent-fortress-497419-c5/hrm/hrm-app
+    tag: "07f64134d6de3266f4b9da029afb7cb22603e441"
+    pullPolicy: IfNotPresent
+
+resources:
+    requests:
+        cpu: 100m
+        memory: 128Mi
+    limits:
+        cpu: 500m
+        memory: 512Mi
+
+cloudSql:
+  instanceConnectionName: "fluent-fortress-497419-c5:europe-west4:dev-sql-database"
