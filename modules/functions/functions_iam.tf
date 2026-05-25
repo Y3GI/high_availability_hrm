@@ -15,6 +15,10 @@ resource "google_project_iam_member" "function_sa_roles" {
     member  = "serviceAccount:${google_service_account.function_sa.email}"
 }
 
+data "google_project" "project" {
+    project_id = var.project_id
+}
+
 resource "google_project_iam_member" "cloudbuild_sa_roles" {
     for_each = toset([
         "roles/artifactregistry.writer",
