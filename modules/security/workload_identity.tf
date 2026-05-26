@@ -20,5 +20,11 @@ resource "google_secret_manager_secret_iam_member" "app_sa_secret_access" {
     project             = var.project_id
     secret_id           = var.db_password_secret_id
     role                = "roles/secretmanager.secretAccessor"
-    member              = "serviceAccount:${google_service_account.app_sa.email}" 
+    member              = "serviceAccount:${google_service_account.app_sa.email}"
+}
+
+resource "google_project_iam_member" "app_sa_run_invoker" {
+    project = var.project_id
+    role    = "roles/run.invoker"
+    member  = "serviceAccount:${google_service_account.app_sa.email}"
 }

@@ -23,6 +23,17 @@ PROJECT_ID         = os.environ["GOOGLE_CLOUD_PROJECT"]
 SECRET_ID          = os.environ.get("DB_PASSWORD_SECRET_ID", "dev-db-password")
 
 
+async def get_id_token(audience: str) -> str:
+    async with httpx.AsyncClient() as client:
+        resp = await client.get(
+            "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/identity",
+            params={"audience": audience},
+            headers={"Metadata-Flavor": "Google"},
+        )
+        resp.raise_for_status()
+        return resp.text
+
+
 async def get_db_password() -> str:
     client = secretmanager.SecretManagerServiceClient()
     name   = f"projects/{PROJECT_ID}/secrets/{SECRET_ID}/versions/latest"
@@ -105,6 +116,7 @@ async def onboard_employee(employee: Employee):
         """, employee.employee_id, employee.name, employee.email, employee.department)
 
     # 2. Trigger Cloud Function to provision workspace
+    token = await get_id_token(CLOUD_FUNCTION_URL)
     async with httpx.AsyncClient() as client:
         resp = await client.post(
             CLOUD_FUNCTION_URL,
@@ -113,6 +125,7 @@ async def onboard_employee(employee: Employee):
                 "employee_id": employee.employee_id,
                 "department": employee.department,
             },
+            headers={"Authorization": f"Bearer {token}"},
             timeout=30.0
         )
         if resp.status_code != 200:
@@ -144,6 +157,7 @@ async def offboard_employee(employee_id: str):
         """, employee_id)
 
     # 2. Trigger Cloud Function to destroy workspace
+    token = await get_id_token(CLOUD_FUNCTION_URL)
     async with httpx.AsyncClient() as client:
         resp = await client.post(
             CLOUD_FUNCTION_URL,
@@ -152,6 +166,7 @@ async def offboard_employee(employee_id: str):
                 "employee_id": employee_id,
                 "department": row["department"],
             },
+            headers={"Authorization": f"Bearer {token}"},
             timeout=30.0
         )
         if resp.status_code != 200:
