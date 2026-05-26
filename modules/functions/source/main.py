@@ -4,7 +4,7 @@ import json
 import base64
 import secrets
 import string
-from github import Github  # PyGithub
+from github import Github, InputGitTreeElement  # PyGithub
 from google.cloud import secretmanager
 
 
@@ -57,17 +57,17 @@ def commit_files(repo, files: dict, message: str, branch: str = "main"):
     ref = repo.get_git_ref(f"heads/{branch}")
     base_tree = repo.get_git_tree(ref.object.sha, recursive=True)
 
-    blobs = []
+    elements = []
     for path, content in files.items():
         blob = repo.create_git_blob(content, "utf-8")
-        blobs.append({
-            "path": path,
-            "mode": "100644",
-            "type": "blob",
-            "sha": blob.sha
-        })
+        elements.append(InputGitTreeElement(
+            path=path,
+            mode="100644",
+            type="blob",
+            sha=blob.sha,
+        ))
 
-    new_tree = repo.create_git_tree(blobs, base_tree)
+    new_tree = repo.create_git_tree(elements, base_tree)
     parent = repo.get_git_commit(ref.object.sha)
     commit = repo.create_git_commit(message, new_tree, [parent])
     ref.edit(commit.sha)
