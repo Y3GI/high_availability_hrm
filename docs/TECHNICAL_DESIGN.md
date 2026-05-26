@@ -69,11 +69,24 @@ Internet
     → GCP Load Balancer (auto-created by GKE Ingress controller)
     → Identity-Aware Proxy (validates Google IAM identity)
     → Rejected if not roles/iap.httpsResourceAccessor
-    → GKE NodePort Service
-    → Pod
+    → HRM app pod (hrm namespace)
 ```
 
 IAP enforced at the load balancer backend via `BackendConfig` CRD. No VPN required.
+
+**Workspace access** uses a second credential layer on top of IAP:
+
+```
+Authenticated user → https://cs3-hrm-app.duckdns.org/workspace
+    → HRM app serves login form
+    → POST /workspace/_auth: bcrypt verify employee ID + password against Cloud SQL
+    → Session cookie issued (itsdangerous signed, 8h TTL, HttpOnly + Secure)
+    → Subsequent requests: cookie verified, httpx proxies to internal pod
+         http://{employee_id}-workspace.{department}.svc.cluster.local:8080/{path}
+```
+
+Employees use company-issued credentials (auto-generated employee ID + password).
+Workspace pods have no public exposure — all traffic routes through the HRM proxy.
 
 ### 3.2 Internal (Pod → Database)
 
@@ -143,13 +156,16 @@ Kubernetes (manifest side):
 
 ### 4.3 Namespace Isolation
 
-| Namespace | Purpose | Cloud SQL | Internet |
-|---|---|---|---|
-| `argocd` | GitOps controller | No | Yes (GitHub) |
-| `hrm` | Core application | Yes (proxy) | No |
-| `software` | Employee workspaces | No | Yes (443) |
-| `devops` | Employee workspaces | Yes (proxy) | Yes (443) |
-| `db-engineering` | Employee workspaces | Yes (proxy + sidecar) | Yes (443) |
+| Namespace | Purpose | Cloud SQL | Internet | Ingress from `hrm` |
+|---|---|---|---|---|
+| `argocd` | GitOps controller | No | Yes (GitHub) | No |
+| `hrm` | Core application | Yes (proxy) | No | — |
+| `software` | Employee workspaces | No | Yes (443) | Yes (port 8080) |
+| `devops` | Employee workspaces | Yes (proxy) | Yes (443) | Yes (port 8080) |
+| `db-engineering` | Employee workspaces | Yes (proxy + sidecar) | Yes (443) | Yes (port 8080) |
+
+Department NetworkPolicies allow ingress from the `hrm` namespace on port 8080 so
+the HRM reverse proxy can reach workspace pods. All other ingress is denied by default.
 
 ---
 
@@ -169,12 +185,19 @@ Tier 3 — Database    Cloud SQL PostgreSQL 15 via Cloud SQL Auth Proxy sidecar
 |---|---|---|
 | `GET` | `/` | Serve frontend |
 | `GET` | `/api/employees` | List active employees |
-| `POST` | `/api/employees` | Onboard: insert to DB + call Cloud Function |
+| `POST` | `/api/employees` | Onboard: call Cloud Function → bcrypt hash → insert to DB |
 | `DELETE` | `/api/employees/{id}` | Offboard: soft delete + call Cloud Function |
 | `GET` | `/api/health` | Uptime check endpoint |
+| `GET` | `/workspace`, `/workspace/` | Login form (no session) or proxy root (valid session) |
+| `POST` | `/workspace/_auth` | Verify employee ID + password, issue session cookie |
+| `POST` | `/workspace/_logout` | Clear session cookie |
+| `*` | `/workspace/{path}` | Reverse proxy to employee's code-server pod |
+| `WS` | `/workspace/{path}` | WebSocket proxy to employee's code-server pod |
 
-Onboard is transactional — DB insert rolled back if Cloud Function call fails.
-Offboard uses soft delete (`status = offboarded`) — record retained for audit.
+Onboard calls the Cloud Function **first** to obtain the generated password, then
+stores a bcrypt hash in Cloud SQL — plaintext never persists. If the Cloud Function
+fails, no DB record is created. Offboard uses soft delete (`status = offboarded`)
+— record retained for audit.
 
 ### 5.2 Cloud Function (Onboarding Engine)
 
@@ -260,42 +283,44 @@ AppProject: hrm-platform (scoped to this repo + specific namespaces)
 ```
 Cloud Function commits k8s/workspaces/DEPT/EMP_ID/{workspace.yaml, secret.yaml}
     ↓ ArgoCD detects new directory (ApplicationSet Git generator)
-    ↓ Application created → Pod + Secret provisioned in namespace
-    ↓ Employee accesses code-server via IAP
+    ↓ Application created → Pod + ClusterIP Service provisioned in namespace
+    ↓ Employee visits /workspace → login form → session cookie → proxied to pod
 
 Cloud Function deletes k8s/workspaces/DEPT/EMP_ID/
     ↓ ArgoCD detects deletion (prune: true)
-    ↓ Pod + Secret destroyed → all access revoked
+    ↓ Pod + Service + Secret destroyed
+    ↓ Session cookies for that employee_id rejected immediately (DB status = offboarded)
 ```
 
 ---
 
 ## 8. CI/CD Pipeline Architecture
 
-### 8.1 Three Workflows
+### 8.1 Two Workflows
 
 | Workflow | Trigger | Responsibility |
 |---|---|---|
-| `deploy.yml` | Push — `env/**`, `modules/**` | Infrastructure + workspace images |
-| `build-images.yml` | Push — `hrm-app/**` | HRM app Docker image |
-| `destroy.yml` | Manual — type `Destroy` | Full teardown |
+| `terraform_deploy.yml` | Push — `env/**`, `modules/**`, `hrm_app/**`, `k8s/**` or manual | Infrastructure + workspace images + HRM app image + cluster config |
+| `terraform_destroy.yml` | Manual — type `Destroy` | Full teardown |
 
-Path triggers enforce separation — app code commits don't retrigger infrastructure.
-`[skip ci]` in pipeline-generated commits prevents loop triggering.
+A single deploy workflow handles all changes — both infrastructure and application
+code. `[skip ci]` in pipeline-generated commits (values.yaml, serviceaccount.yaml)
+prevents loop triggering.
 
 ### 8.2 Deploy Pipeline Execution Order
 
 ```
 WIF Authentication
     ↓ terragrunt run-all plan + apply
-    ↓ Pull codercom/code-server → retag → push to Artifact Registry (3 images)
+    ↓ [parallel] Pull codercom/code-server → retag → push to Artifact Registry (3 images)
+    ↓ [parallel] Build hrm_app/ Docker image → push with git SHA tag
     ↓ Get GKE credentials
     ↓ Install ArgoCD (idempotent — skips if already running)
     ↓ Apply ArgoCD AppProject + Applications
-    ↓ Read Terraform outputs (SA emails, IAP creds, connection names, function URL)
+    ↓ Read Terraform outputs (SA emails, Cloud SQL connection name, Cloud Function URL)
     ↓ envsubst: values.yaml.tpl → values.yaml
     ↓ envsubst: serviceaccount.yaml.tpl → serviceaccount.yaml (3 departments)
-    ↓ kubectl apply iap-oauth-secret + hrm-db-secret
+    ↓ kubectl apply iap-oauth-secret + hrm-db-secret + hrm-session-secret
     ↓ git commit generated files [skip ci]
 ```
 

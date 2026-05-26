@@ -13,7 +13,7 @@ locals {
 dependency "gke" {
     config_path = "../gke"
 
-    mock_outputs_allowed_terraform_commands = ["plan"]
+    mock_outputs_allowed_terraform_commands = ["plan", "destroy"]
     mock_outputs = {
         workload_identity_pool = "mock-project.svc.id.goog"
     }
@@ -22,7 +22,7 @@ dependency "gke" {
 dependency "storage" {
     config_path = "../storage"
 
-    mock_outputs_allowed_terraform_commands = ["plan"]
+    mock_outputs_allowed_terraform_commands = ["plan", "destroy"]
     mock_outputs = {
         db_instance_name        = "mock-db-instance-name"
         db_password_secret_id   = "mock-db-password-secret-id"

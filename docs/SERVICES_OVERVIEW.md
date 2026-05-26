@@ -127,11 +127,15 @@ One SA per component — never the default Compute SA:
 |---|---|---|
 | `dev-cicd-sa` | GitHub Actions | Terraform apply permissions |
 | `dev-gke-node-sa` | GKE nodes | logWriter, metricWriter, artifactregistry.reader |
-| `dev-hrm-app-sa` | HRM app pods | cloudsql.client, secretmanager.secretAccessor |
-| `dev-hrm-function-sa` | Cloud Function | secretmanager.secretAccessor, run.invoker |
+| `dev-hrm-app-sa` | HRM app pods | cloudsql.client, secretmanager.secretAccessor, run.invoker |
+| `dev-hrm-function-sa` | Cloud Function | secretmanager.secretAccessor |
 | `dev-software-sa` | Software dept pods | Workload Identity base only |
 | `dev-devops-sa` | DevOps dept pods | cloudsql.client |
 | `dev-db-engineering-sa` | DB Eng pods | cloudsql.client |
+
+`roles/run.invoker` on the HRM app SA allows the FastAPI backend to call the
+Cloud Function (Cloud Run) with a valid identity token obtained from the GKE
+metadata server.
 
 `google_project_iam_member` (additive) used throughout — never `google_project_iam_binding`
 (authoritative). `iam_binding` removes unlisted members on apply — unsafe in modules.
@@ -169,11 +173,11 @@ Versioning enabled on state bucket — previous state versions retained.
 Docker image registry in `europe-west4` — same region as GKE for fast pulls,
 no cross-region egress costs. Repository: `europe-west4-docker.pkg.dev/PROJECT/hrm`.
 
-Images pushed by deploy pipeline on every infrastructure run:
+Images pushed by the deploy pipeline:
 - `software-workspace:latest` — `codercom/code-server` retagged
 - `devops-workspace:latest` — `codercom/code-server` retagged
 - `db-engineering-workspace:latest` — `codercom/code-server` retagged
-- `hrm-app:latest` — built from `./hrm-app/Dockerfile` by separate workflow
+- `hrm-app:{git-sha}` — built from `hrm_app/Dockerfile`, tagged with commit SHA
 
 GKE nodes pull from Artifact Registry automatically via node SA `artifactregistry.reader`.
 No Docker Hub credentials needed on nodes.
@@ -261,15 +265,44 @@ exists — enables CI validation on pull requests.
 ### FastAPI (HRM Backend)
 
 Python async web framework. Serves both the REST API and the static HTML frontend
-from the same container. Connects to Cloud SQL via `asyncpg` connection pool.
+from the same container. Also acts as a reverse proxy for all workspace traffic
+(`/workspace/*`). Connects to Cloud SQL via `asyncpg` connection pool.
 Reads DB password from Secret Manager at startup via Workload Identity.
 
 ### code-server
 
 Browser-based VS Code IDE running in each employee workspace pod on port 8080.
-Authenticated via per-employee password stored in a Kubernetes Secret. Accessed
-through IAP — only the authenticated Google identity matching the employee can
-reach their instance.
+The password is stored in a Kubernetes Secret (mounted as `$PASSWORD` env var).
+Employees do not access code-server directly — all traffic is reverse-proxied by
+the HRM app (see Workspace Reverse Proxy below).
+
+### Workspace Session Authentication
+
+Employees access `https://cs3-hrm-app.duckdns.org/workspace` and are presented
+with a login form (employee ID + password). The HRM backend verifies the password
+against a bcrypt hash stored in Cloud SQL, then issues a signed `HttpOnly` session
+cookie (`workspace_session`) using `itsdangerous.URLSafeTimedSerializer`. Sessions
+expire after 8 hours. Stale cookies (e.g. after offboarding) are detected and
+cleared automatically — the login form is shown again.
+
+This model means employees use company-issued credentials (not personal Google
+accounts) to access their workspaces. IAP protects the overall platform; workspace
+access within IAP uses a separate credential layer.
+
+### Workspace Reverse Proxy
+
+The HRM app pod proxies all `/workspace/{path}` traffic to the authenticated
+employee's code-server pod using its internal Kubernetes DNS name:
+
+```
+https://cs3-hrm-app.duckdns.org/workspace/{path}
+    → HRM app verifies session cookie
+    → httpx forwards to http://{employee_id}-workspace.{department}.svc.cluster.local:8080/{path}
+```
+
+WebSocket connections (required by code-server for terminal and file sync) are
+proxied over the same route using the `websockets` library. No NodePort or
+LoadBalancer is needed on workspace pods — all routing is internal.
 
 ### Cloud SQL Auth Proxy
 

@@ -174,7 +174,17 @@ GCP Console → APIs & Services → Credentials
 
 Copy the **Client ID** and **Client Secret** — they are shown only once.
 
-### Step 3 — Store as GitHub secrets
+### Step 3 — Add IAP redirect URI
+
+In the OAuth client settings, add the following to **Authorised redirect URIs**:
+
+```
+https://iap.googleapis.com/v1/oauth/clientIds/YOUR_CLIENT_ID:handleRedirect
+```
+
+Replace `YOUR_CLIENT_ID` with the client ID from step 2.
+
+### Step 4 — Store as GitHub secrets
 
 Add both values in `GitHub → Settings → Secrets and variables → Actions`:
 
@@ -200,6 +210,7 @@ Configure all remaining values in `GitHub → Settings → Secrets and variables
 | `GOOGLE_SA_EMAIL` | CI/CD SA email | `terraform output cicd_sa_email` in `global/bootstrap` |
 | `IAP_CLIENT_ID` | IAP OAuth client ID | GCP Console — see Section 5 |
 | `IAP_CLIENT_SECRET` | IAP OAuth client secret | GCP Console — see Section 5 |
+| `SESSION_SECRET` | Random string ≥ 32 chars for signing workspace session cookies | Generate: `python3 -c "import secrets; print(secrets.token_hex(32))"` |
 
 ### Variables (non-sensitive configuration)
 
@@ -225,7 +236,7 @@ git push origin main
 
 ### Step 2 — What the deploy pipeline does
 
-The pipeline runs three parallel jobs after infrastructure is ready:
+The `terraform_deploy.yml` pipeline runs three jobs:
 
 **Job 1 — Terragrunt Apply** (runs first):
 ```
@@ -235,46 +246,34 @@ The pipeline runs three parallel jobs after infrastructure is ready:
        networking → gke → storage → security → functions → monitoring
 ```
 
-**Job 2 — Push Workspace Images** (after Job 1):
+**Job 2 — Push Workspace Images** (after Job 1, parallel with Job 3):
 ```
 4. Pull codercom/code-server:latest
 5. Retag and push to Artifact Registry for each department:
        software-workspace, devops-workspace, db-engineering-workspace
+6. Build HRM app image from hrm_app/ and push with git SHA tag
 ```
 
 **Job 3 — Configure Cluster** (after Job 1, parallel with Job 2):
 ```
-6.  Get GKE cluster credentials
-7.  Install ArgoCD in argocd namespace (idempotent — skips if already installed)
-8.  Apply ArgoCD AppProject + Application manifests
-9.  Read Terraform outputs: app SA email, Cloud SQL connection name, Cloud Function URL
-10. Read IAP credentials from GitHub secrets (IAP_CLIENT_ID, IAP_CLIENT_SECRET)
+7.  Get GKE cluster credentials
+8.  Install ArgoCD in argocd namespace (idempotent — skips if already installed)
+9.  Apply ArgoCD AppProject + Application manifests
+10. Read Terraform outputs: app SA email, Cloud SQL connection name, Cloud Function URL
 11. Generate k8s/apps/hrm/values.yaml from values.yaml.tpl via envsubst
 12. Generate department serviceaccount.yaml files from .tpl files via envsubst
 13. Create iap-oauth-secret in hrm namespace
 14. Create hrm-db-secret in hrm namespace
-15. Commit generated manifests back to repo [skip ci]
+15. Create hrm-session-secret in hrm namespace (from SESSION_SECRET GitHub secret)
+16. Commit generated manifests back to repo [skip ci]
 ```
 
-ArgoCD takes over after step 15 and syncs all manifests into the cluster.
+ArgoCD takes over after step 16 and syncs all manifests into the cluster.
 
 **Expected duration:** 20–30 minutes on first run (Cloud SQL HA provisioning is the
 slowest step at ~10 minutes).
 
-### Step 3 — Build the HRM app image
-
-The HRM app image is built by a separate manually-triggered workflow.
-
-```
-GitHub → Actions → Build & Push Images → Run workflow
-    Confirmation input: Deploy HRM
-→ Run workflow
-```
-
-This builds from `hrm_app/`, tags the image with both the git SHA and `latest`,
-and pushes to Artifact Registry. The SHA tag is what ArgoCD uses to track versions.
-
-### Step 4 — Verify
+### Step 3 — Verify
 
 ```bash
 # Get cluster credentials locally
@@ -354,7 +353,22 @@ The GCP-managed SSL certificate activates automatically within 10–20 minutes o
 DNS propagation. Certificate provisioning requires the domain to resolve correctly
 — do not skip this step if you want HTTPS.
 
-### 8.3 Verify monitoring
+### 8.3 Add your account to IAP
+
+After deployment, grant yourself (and any other HR admins) access to the HRM app:
+
+```bash
+gcloud iap web add-iam-policy-binding \
+  --resource-type=backend-services \
+  --service=YOUR_BACKEND_SERVICE_ID \
+  --member="user:your-email@example.com" \
+  --role="roles/iap.httpsResourceAccessor" \
+  --project=YOUR_PROJECT_ID
+```
+
+Or manage `iap_members` in `env/dev/terragrunt.hcl` and re-apply.
+
+### 8.4 Verify monitoring
 
 Navigate to `GCP Console → Monitoring → Dashboards` to confirm the HRM Platform
 dashboard was created. Alert policies are visible under `Monitoring → Alerting`.
@@ -374,9 +388,7 @@ GitHub → Actions → Destroy Workflow → Run workflow → type "Destroy" → 
 
 **What the destroy pipeline does:**
 1. Authenticates to GCP via WIF
-2. Disables `deletion_protection` on Cloud SQL (required — Terraform cannot destroy
-   a protected instance)
-3. Runs `terragrunt run-all destroy` across all modules
+2. Runs `terragrunt run-all destroy` across all modules
 
 **What is NOT destroyed automatically:**
 - The GCS state bucket (created by bootstrap, not managed by env/dev Terragrunt)

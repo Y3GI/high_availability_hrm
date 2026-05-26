@@ -13,7 +13,7 @@ locals {
 dependency "networking" {
     config_path = "../networking"
 
-    mock_outputs_allowed_terraform_commands = ["plan"]
+    mock_outputs_allowed_terraform_commands = ["plan", "destroy"]
     mock_outputs = {
         network_id          = "projects/mock-project/global/networks/mock-network"
     }

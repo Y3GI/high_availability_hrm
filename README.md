@@ -4,7 +4,7 @@ An enterprise-grade, Zero Trust GitOps platform built on Google Cloud Platform. 
 
 ## Overview
 
-When HR creates an employee, a FastAPI backend calls a Cloud Function which commits a workspace manifest to this repository. ArgoCD detects the commit and spins up an isolated Kubernetes pod for that employee running a browser-based VS Code IDE. When HR offboards the employee, the manifest is deleted from git and ArgoCD destroys the pod. Git is the single source of truth at every layer.
+When HR creates an employee, a FastAPI backend calls a Cloud Function which commits a workspace manifest to this repository. ArgoCD detects the commit and spins up an isolated Kubernetes pod for that employee running a browser-based VS Code IDE (code-server). The employee receives company-issued credentials (employee ID + one-time password) to access their workspace via a login form at `/workspace`. When HR offboards the employee, the manifest is deleted from git and ArgoCD destroys the pod. Git is the single source of truth at every layer.
 
 ## Network Diagram
 
@@ -13,12 +13,13 @@ When HR creates an employee, a FastAPI backend calls a Cloud Function which comm
 ## Architecture
 
 ```
-User
+User (HR Admin)
  └─► GCP Load Balancer (auto-created by GKE Ingress)
-      └─► Identity-Aware Proxy (Google IAM enforcement)
+      └─► Identity-Aware Proxy (Google IAM enforcement — protects /*)
            └─► Global VPC — Private Subnet (europe-west4)
                 ├─► GKE Standard Cluster (Private Nodes)
                 │    ├─► hrm namespace          (FastAPI app + frontend + Cloud SQL proxy)
+                │    │    └─► /workspace/* proxy ──► workspace pod (session cookie auth)
                 │    ├─► software namespace      (employee workspaces — no DB access)
                 │    ├─► devops namespace         (employee workspaces — DB read access)
                 │    └─► db-engineering namespace (employee workspaces — full DB access)
@@ -43,6 +44,7 @@ GitOps:   HR Action ──► FastAPI ──► Cloud Function ──► GitHub 
 | State Backend | GCS with native locking |
 | CI/CD Auth | Workload Identity Federation (OIDC) |
 | Ingress Auth | Identity-Aware Proxy (IAP) |
+| Workspace Auth | Session cookies (bcrypt + itsdangerous) |
 | Container Registry | Artifact Registry |
 | Monitoring | Cloud Monitoring — uptime checks, alert policies, dashboard |
 
@@ -73,20 +75,18 @@ GitOps:   HR Action ──► FastAPI ──► Cloud Function ──► GitHub 
 │   │   └── departments/     # Department namespace infrastructure (plain manifests)
 │   └── workspaces/          # Auto-generated per-employee workspace manifests
 │       └── _template/       # Reference template (rendered by Cloud Function)
-├── hrm-app/                 # FastAPI application + HTML frontend + Dockerfile
+├── hrm_app/                 # FastAPI application + HTML frontend + Dockerfile
 └── .github/workflows/
-    ├── deploy.yml           # Infrastructure + workspace images (triggers on env/** modules/**)
-    ├── build-images.yml     # HRM app image only (triggers on hrm-app/**)
-    └── destroy.yml          # Manual teardown with confirmation
+    ├── terraform_deploy.yml  # Full deploy: infrastructure + images + cluster config
+    └── terraform_destroy.yml # Manual teardown with confirmation
 ```
 
 ## Workflows
 
 | Workflow | Trigger | What it does |
 |---|---|---|
-| `deploy.yml` | Push to `main` — `env/**` or `modules/**` | Terragrunt apply + workspace image push + ArgoCD setup + k8s secrets |
-| `build-images.yml` | Push to `main` — `hrm-app/**` | Build + push HRM app Docker image |
-| `destroy.yml` | Manual — type `Destroy` to confirm | Disable deletion protection + full teardown |
+| `terraform_deploy.yml` | Push to `main` — `env/**`, `modules/**`, `hrm_app/**`, `k8s/**` or manual | Terragrunt apply + workspace images + ArgoCD setup + k8s secrets + HRM app image |
+| `terraform_destroy.yml` | Manual — type `Destroy` to confirm | Full teardown |
 
 ## Prerequisites
 
@@ -98,7 +98,7 @@ GitOps:   HR Action ──► FastAPI ──► Cloud Function ──► GitHub 
 
 ## Deployment
 
-See [INTEGRATION.md](./INTEGRATION.md) for the full step-by-step deployment guide including bootstrap, WIF setup, GitHub PAT configuration, pipeline secrets and variables, and post-deploy steps.
+See [INTEGRATION.md](./docs/INTEGRATION.md) for the full step-by-step deployment guide including bootstrap, WIF setup, GitHub PAT configuration, pipeline secrets and variables, and post-deploy steps.
 
 ## Security Model
 
@@ -108,25 +108,31 @@ See [INTEGRATION.md](./INTEGRATION.md) for the full step-by-step deployment guid
 - **Namespace isolation** — each department has dedicated NetworkPolicy, ResourceQuota, and Service Account
 - **Least privilege** — dedicated SA per component; `iam_member` (additive) never `iam_binding` (authoritative)
 - **Default deny networking** — all pod-level traffic blocked unless explicitly permitted by NetworkPolicy
+- **Company-issued workspace credentials** — employees access code-server with HR-provisioned employee ID + password, not personal Google accounts
 
 ## Onboarding Flow
 
 ```
-HR fills in employee form (frontend)
+HR fills in employee form (name, email, department)
     ↓
-FastAPI backend inserts employee record to Cloud SQL
+FastAPI generates unique employee ID (emp-xxxxxxxx)
     ↓
 Backend calls Cloud Function (POST /onboard)
     ↓
-Function generates random workspace password
-    ↓
+Function generates cryptographically random workspace password
 Function commits workspace.yaml + secret.yaml to k8s/workspaces/DEPT/EMP_ID/
+Function returns password to backend
+    ↓
+Backend stores bcrypt hash of password in Cloud SQL employees table
+    ↓
+HR admin sees employee ID + password once — credentials not stored in plaintext
     ↓
 ArgoCD ApplicationSet detects new directory
     ↓
 Pod + Secret created in department namespace
     ↓
-Employee accesses code-server IDE via IAP-protected URL
+Employee accesses https://cs3-hrm-app.duckdns.org/workspace
+Logs in with employee ID + password → session cookie issued → proxied to their pod
 ```
 
 ## Offboarding Flow
@@ -143,6 +149,7 @@ Function deletes k8s/workspaces/DEPT/EMP_ID/ from git
 ArgoCD detects deletion (prune: true)
     ↓
 Pod + Secret destroyed — all access revoked
+Session cookies for that employee ID are rejected immediately
 ```
 
 ## Department Access Model
