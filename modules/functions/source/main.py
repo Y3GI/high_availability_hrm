@@ -124,7 +124,7 @@ def handle_hr_event(request):
 
             # Build new tree without the employee's files
             new_blobs = [
-                {"path": e.path, "mode": "100644", "type": "blob", "sha": e.sha}
+                InputGitTreeElement(path=e.path, mode="100644", type="blob", sha=e.sha)
                 for e in base_tree.tree
                 if not e.path.startswith(workspace_path)
                 and e.type == "blob"
