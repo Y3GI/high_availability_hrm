@@ -12,7 +12,7 @@ iap:
 
 image: 
     repository: europe-west4-docker.pkg.dev/fluent-fortress-497419-c5/hrm/hrm-app
-    tag: "b7e3eac5ce2e5344ae37c013ededef30caa62769"
+    tag: "3b31dbc7b2e259a47684d0e5dd0f40759f000151"
     pullPolicy: IfNotPresent
 
 resources:
