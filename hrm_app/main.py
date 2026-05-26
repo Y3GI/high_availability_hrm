@@ -295,14 +295,22 @@ async def offboard_employee(employee_id: str):
 
 # ── Workspace auth ────────────────────────────────────────────────────────────
 
+def _login_page_clear_cookie() -> HTMLResponse:
+    resp = HTMLResponse(LOGIN_HTML)
+    resp.delete_cookie(COOKIE_NAME)
+    return resp
+
+
 @app.get("/workspace")
 @app.get("/workspace/")
 async def workspace_root(request: Request):
     token = request.cookies.get(COOKIE_NAME)
     if token and verify_session(token):
-        # Already logged in — let the proxy handle it
-        return await proxy_workspace_http(request, "")
-    return HTMLResponse(LOGIN_HTML)
+        try:
+            return await proxy_workspace_http(request, "")
+        except HTTPException:
+            return _login_page_clear_cookie()
+    return _login_page_clear_cookie()
 
 
 @app.post("/workspace/_auth")
@@ -348,9 +356,12 @@ async def workspace_logout(response: Response):
 async def proxy_workspace_http(request: Request, path: str = ""):
     token = request.cookies.get(COOKIE_NAME)
     if not token or not verify_session(token):
-        return HTMLResponse(LOGIN_HTML, status_code=401)
+        return _login_page_clear_cookie()
 
-    row = await get_workspace_for_session(request)
+    try:
+        row = await get_workspace_for_session(request)
+    except HTTPException:
+        return _login_page_clear_cookie()
     target = f"http://{row['employee_id']}-workspace.{row['department']}.svc.cluster.local:8080/{path}"
     if request.url.query:
         target += f"?{request.url.query}"
