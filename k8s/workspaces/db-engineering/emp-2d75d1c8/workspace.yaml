@@ -1,10 +1,10 @@
 apiVersion: v1
 kind: Pod
 metadata:
-  name: emp-db28d354
+  name: emp-2d75d1c8
   namespace: db-engineering
   labels:
-    employee-id: "emp-db28d354"
+    employee-id: "emp-2d75d1c8"
     department: "db-engineering"
     managed-by: "hrm-cloud-function"
 spec:
@@ -27,7 +27,7 @@ spec:
         - name: PASSWORD
           valueFrom:
             secretKeyRef:
-              name: emp-db28d354-workspace-secret
+              name: emp-2d75d1c8-workspace-secret
               key: password
       ports:
         - containerPort: 8080
@@ -35,11 +35,11 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: emp-db28d354-workspace
+  name: emp-2d75d1c8-workspace
   namespace: db-engineering
 spec:
   selector:
-    employee-id: "emp-db28d354"
+    employee-id: "emp-2d75d1c8"
   ports:
     - port: 8080
       targetPort: 8080
