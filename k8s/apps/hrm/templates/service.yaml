@@ -3,8 +3,9 @@ kind: Service
 metadata: 
   name: hrm-service
   namespace: {{ .Values.namespace }}
-  annotations: 
+  annotations:
     cloud.google.com/backend-config: '{"default": "hrm-app-config"}'
+    cloud.google.com/neg: '{"ingress": true}'
 spec:
   selector:
     app: hrm
