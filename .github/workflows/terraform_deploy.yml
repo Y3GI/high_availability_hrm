@@ -181,6 +181,13 @@ jobs:
                   --namespace hrm \
                   --dry-run=client -o yaml | kubectl apply -f -
 
+            - name: Create session secret
+              run: |
+                kubectl create secret generic hrm-session-secret \
+                  --from-literal=session_secret=${{ secrets.SESSION_SECRET }} \
+                  --namespace hrm \
+                  --dry-run=client -o yaml | kubectl apply -f -
+
             - name: Commit generated manifests
               run: |
                 git config user.name "github-actions[bot]"
