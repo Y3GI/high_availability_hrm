@@ -1,4 +1,5 @@
 import os
+import asyncio
 import httpx
 import asyncpg
 from fastapi import FastAPI, HTTPException
@@ -30,12 +31,18 @@ async def get_db_password() -> str:
 
 async def get_db_pool():
     password = await get_db_password()
-    return await asyncpg.create_pool(
-        host=DB_HOST, port=DB_PORT,
-        database=DB_NAME, user=DB_USER, password=password,
-        min_size=2, max_size=10,
-        ssl=False,
-    )
+    for attempt in range(10):
+        try:
+            return await asyncpg.create_pool(
+                host=DB_HOST, port=DB_PORT,
+                database=DB_NAME, user=DB_USER, password=password,
+                min_size=2, max_size=10,
+                ssl=False,
+            )
+        except Exception:
+            if attempt == 9:
+                raise
+            await asyncio.sleep(3)
 
 
 @app.on_event("startup")
