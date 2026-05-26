@@ -135,7 +135,7 @@
       creds.innerHTML = `
         <h3>⚠ Save these credentials — they will not be shown again</h3>
         <p>Employee ID: <code>${data.employee_id}</code></p>
-        <p>Workspace URL: <code>/workspace/${data.employee_id}</code></p>
+        <p>Workspace URL: available in ~2 min via <code>kubectl get svc ${data.employee_id}-workspace -n &lt;department&gt;</code></p>
         <p>Password: <code>${data.password}</code></p>
       `;
       document.getElementById('emp-name').value = '';
