@@ -1,0 +1,28 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: 1
+  namespace: db-engineering
+  labels:
+    employee-id: "1"
+    department: "db-engineering"
+    managed-by: "hrm-cloud-function"
+spec:
+  serviceAccountName: db-engineering-sa
+  restartPolicy: Always
+  containers:
+    - name: workspace
+      image:  europe-west4-docker.pkg.dev/fluent-fortress-497419-c5/hrm/db-engineering-workspace:latest
+      resources:
+        requests:
+          cpu: 100m
+          memory: 128Mi
+        limits:
+          cpu: 500m
+          memory: 512Mi
+      env:
+        - name: PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: 1-workspace-secret
+              key: password
