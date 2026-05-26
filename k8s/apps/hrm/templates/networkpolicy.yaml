@@ -46,3 +46,16 @@ spec:
       ports:
         - protocol: TCP
           port: 3307
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: software
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: devops
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: db-engineering
+      ports:
+        - protocol: TCP
+          port: 8080

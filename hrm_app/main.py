@@ -3,9 +3,10 @@ import uuid
 import asyncio
 import httpx
 import asyncpg
-from fastapi import FastAPI, HTTPException
+import websockets
+from fastapi import FastAPI, HTTPException, Request, WebSocket
+from fastapi.responses import FileResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from google.cloud import secretmanager
 
@@ -106,16 +107,23 @@ async def onboard_employee(employee: Employee):
     # 1. Save to database
     async with app.state.db.acquire() as conn:
         existing = await conn.fetchrow(
-            "SELECT id FROM employees WHERE email = $1 AND status = 'active'",
+            "SELECT status FROM employees WHERE email = $1",
             employee.email
         )
         if existing:
-            raise HTTPException(400, "Employee already exists")
-
-        await conn.execute("""
-            INSERT INTO employees (employee_id, name, email, department)
-            VALUES ($1, $2, $3, $4)
-        """, employee_id, employee.name, employee.email, employee.department)
+            if existing["status"] == "active":
+                raise HTTPException(400, "Employee already exists")
+            await conn.execute("""
+                UPDATE employees
+                SET employee_id = $1, name = $2, department = $3,
+                    status = 'active', created_at = NOW()
+                WHERE email = $4
+            """, employee_id, employee.name, employee.department, employee.email)
+        else:
+            await conn.execute("""
+                INSERT INTO employees (employee_id, name, email, department)
+                VALUES ($1, $2, $3, $4)
+            """, employee_id, employee.name, employee.email, employee.department)
 
     # 2. Trigger Cloud Function to provision workspace
     token = await get_id_token(CLOUD_FUNCTION_URL)
@@ -180,6 +188,79 @@ async def offboard_employee(employee_id: str):
             raise HTTPException(500, f"Workspace teardown failed: {resp.text}")
 
     return {"status": "offboarded", "employee_id": employee_id}
+
+
+async def get_workspace_for_request(headers) -> dict:
+    raw = headers.get("x-goog-authenticated-user-email", "")
+    email = raw.removeprefix("accounts.google.com:")
+    if not email:
+        raise HTTPException(401, "Not authenticated")
+    async with app.state.db.acquire() as conn:
+        row = await conn.fetchrow(
+            "SELECT employee_id, department FROM employees WHERE email = $1 AND status = 'active'",
+            email
+        )
+    if not row:
+        raise HTTPException(403, "No active workspace for your account")
+    return row
+
+
+@app.api_route("/workspace", methods=["GET"])
+@app.api_route("/workspace/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS", "HEAD"])
+async def proxy_workspace_http(request: Request, path: str = ""):
+    row = await get_workspace_for_request(request.headers)
+    target = f"http://{row['employee_id']}-workspace.{row['department']}.svc.cluster.local:8080/{path}"
+    if request.url.query:
+        target += f"?{request.url.query}"
+
+    forward_headers = {
+        k: v for k, v in request.headers.items()
+        if k.lower() not in ("host", "x-goog-authenticated-user-email", "x-goog-iap-jwt-assertion")
+    }
+
+    async with httpx.AsyncClient(timeout=60.0) as client:
+        proxy_resp = await client.request(
+            method=request.method,
+            url=target,
+            headers=forward_headers,
+            content=await request.body(),
+        )
+
+    excluded = {"transfer-encoding", "connection"}
+    resp_headers = {k: v for k, v in proxy_resp.headers.items() if k.lower() not in excluded}
+    return Response(content=proxy_resp.content, status_code=proxy_resp.status_code, headers=resp_headers)
+
+
+@app.websocket("/workspace/{path:path}")
+async def proxy_workspace_ws(websocket: WebSocket, path: str):
+    row = await get_workspace_for_request(websocket.headers)
+    target = f"ws://{row['employee_id']}-workspace.{row['department']}.svc.cluster.local:8080/{path}"
+    if websocket.url.query:
+        target += f"?{websocket.url.query}"
+
+    await websocket.accept()
+    try:
+        async with websockets.connect(target) as ws_target:
+            async def to_target():
+                try:
+                    async for msg in websocket.iter_bytes():
+                        await ws_target.send(msg)
+                except Exception:
+                    pass
+
+            async def to_client():
+                try:
+                    async for msg in ws_target:
+                        if isinstance(msg, bytes):
+                            await websocket.send_bytes(msg)
+                        else:
+                            await websocket.send_text(msg)
+                except Exception:
+                    pass
+
+            await asyncio.gather(to_target(), to_client())
+    except Exception:
+        await websocket.close()
 
 
 @app.get("/api/health")
