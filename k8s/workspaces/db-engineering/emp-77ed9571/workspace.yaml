@@ -1,0 +1,46 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: emp-77ed9571
+  namespace: db-engineering
+  labels:
+    employee-id: "emp-77ed9571"
+    department: "db-engineering"
+    managed-by: "hrm-cloud-function"
+spec:
+  serviceAccountName: db-engineering-sa
+  restartPolicy: Always
+  containers:
+    - name: workspace
+      image: europe-west4-docker.pkg.dev/fluent-fortress-497419-c5/hrm/db-engineering-workspace:latest
+      args:
+        - --bind-addr=0.0.0.0:8080
+        - /home/coder
+      resources:
+        requests:
+          cpu: 100m
+          memory: 128Mi
+        limits:
+          cpu: 500m
+          memory: 512Mi
+      env:
+        - name: PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: emp-77ed9571-workspace-secret
+              key: password
+      ports:
+        - containerPort: 8080
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: emp-77ed9571-workspace
+  namespace: db-engineering
+spec:
+  selector:
+    employee-id: "emp-77ed9571"
+  ports:
+    - port: 8080
+      targetPort: 8080
+  type: ClusterIP
