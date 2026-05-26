@@ -24,6 +24,10 @@ resource "google_service_networking_connection" "private_vpc_connection" {
     service                 = "servicenetworking.googleapis.com"
     network                 = var.network_id
     reserved_peering_ranges = [ google_compute_global_address.private_ip_range.name ]
+
+    # Ensures Cloud SQL is destroyed before this connection on `terraform destroy`,
+    # preventing the "Producer services still using this connection" GCP timing error.
+    depends_on = [ google_sql_database_instance.main ]
 }
 
 resource "google_sql_database_instance" "main" {
