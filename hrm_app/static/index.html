@@ -33,6 +33,12 @@
     .badge.devops { background: #fce8e6; color: #d93025; }
     .badge.db { background: #e6f4ea; color: #188038; }
     .status { color: #888; font-size: 13px; margin-top: 8px; }
+    .credentials { background: #e6f4ea; border: 1px solid #34a853; border-radius: 6px;
+                   padding: 16px; margin-top: 12px; font-size: 14px; }
+    .credentials h3 { color: #188038; margin-bottom: 8px; font-size: 14px; }
+    .credentials p { margin: 4px 0; }
+    .credentials code { background: #fff; padding: 2px 6px; border-radius: 3px;
+                        font-family: monospace; font-size: 13px; }
     .empty { text-align: center; color: #999; padding: 32px; }
   </style>
 </head>
@@ -47,11 +53,10 @@
   <div class="card">
     <h2>Onboard Employee</h2>
     <div class="form-row">
-      <input id="emp-id" placeholder="Employee ID (e.g. emp-001)" />
       <input id="emp-name" placeholder="Full Name" />
+      <input id="emp-email" placeholder="Email" type="email" />
     </div>
     <div class="form-row">
-      <input id="emp-email" placeholder="Email" type="email" />
       <select id="emp-dept">
         <option value="">Select Department</option>
         <option value="software">Software</option>
@@ -61,6 +66,7 @@
     </div>
     <button onclick="onboard()">Onboard Employee</button>
     <p class="status" id="form-status"></p>
+    <div class="credentials" id="credentials" style="display:none"></div>
   </div>
 
   <div class="card">
@@ -104,13 +110,14 @@
 
   async function onboard() {
     const status = document.getElementById('form-status');
+    const creds = document.getElementById('credentials');
+    creds.style.display = 'none';
     const body = {
-      employee_id: document.getElementById('emp-id').value.trim(),
-      name:        document.getElementById('emp-name').value.trim(),
-      email:       document.getElementById('emp-email').value.trim(),
-      department:  document.getElementById('emp-dept').value,
+      name:       document.getElementById('emp-name').value.trim(),
+      email:      document.getElementById('emp-email').value.trim(),
+      department: document.getElementById('emp-dept').value,
     };
-    if (!body.employee_id || !body.name || !body.email || !body.department) {
+    if (!body.name || !body.email || !body.department) {
       status.textContent = 'Please fill in all fields.';
       return;
     }
@@ -124,6 +131,16 @@
       const data = await resp.json();
       if (!resp.ok) throw new Error(data.detail);
       status.textContent = `✓ ${body.name} onboarded. Workspace is being provisioned by ArgoCD.`;
+      creds.style.display = 'block';
+      creds.innerHTML = `
+        <h3>⚠ Save these credentials — they will not be shown again</h3>
+        <p>Employee ID: <code>${data.employee_id}</code></p>
+        <p>Workspace URL: <code>/workspace/${data.employee_id}</code></p>
+        <p>Password: <code>${data.password}</code></p>
+      `;
+      document.getElementById('emp-name').value = '';
+      document.getElementById('emp-email').value = '';
+      document.getElementById('emp-dept').value = '';
       loadEmployees();
     } catch (e) {
       status.textContent = `Error: ${e.message}`;

@@ -115,7 +115,7 @@ def handle_hr_event(request):
                 },
                 message=f"chore: onboard {employee_id} to {department} [skip ci]"
             )
-            return {"status": "onboarded", "employee_id": employee_id}, 200
+            return {"status": "onboarded", "employee_id": employee_id, "password": password}, 200
 
         elif action == "offboard":
             # Delete both files in one commit

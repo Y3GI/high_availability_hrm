@@ -1,4 +1,5 @@
 import os
+import uuid
 import asyncio
 import httpx
 import asyncpg
@@ -77,7 +78,6 @@ async def startup():
 # ── Models ────────────────────────────────────────────────────────────────────
 
 class Employee(BaseModel):
-    employee_id: str
     name: str
     email: str
     department: str   # software | devops | db-engineering
@@ -101,11 +101,13 @@ async def list_employees():
 
 @app.post("/api/employees")
 async def onboard_employee(employee: Employee):
+    employee_id = f"emp-{uuid.uuid4().hex[:8]}"
+
     # 1. Save to database
     async with app.state.db.acquire() as conn:
         existing = await conn.fetchrow(
-            "SELECT id FROM employees WHERE employee_id = $1",
-            employee.employee_id
+            "SELECT id FROM employees WHERE email = $1 AND status = 'active'",
+            employee.email
         )
         if existing:
             raise HTTPException(400, "Employee already exists")
@@ -113,7 +115,7 @@ async def onboard_employee(employee: Employee):
         await conn.execute("""
             INSERT INTO employees (employee_id, name, email, department)
             VALUES ($1, $2, $3, $4)
-        """, employee.employee_id, employee.name, employee.email, employee.department)
+        """, employee_id, employee.name, employee.email, employee.department)
 
     # 2. Trigger Cloud Function to provision workspace
     token = await get_id_token(CLOUD_FUNCTION_URL)
@@ -122,22 +124,27 @@ async def onboard_employee(employee: Employee):
             CLOUD_FUNCTION_URL,
             json={
                 "action": "onboard",
-                "employee_id": employee.employee_id,
+                "employee_id": employee_id,
                 "department": employee.department,
             },
             headers={"Authorization": f"Bearer {token}"},
             timeout=30.0
         )
         if resp.status_code != 200:
-            # Rollback DB insert if function fails
             async with app.state.db.acquire() as conn:
                 await conn.execute(
                     "DELETE FROM employees WHERE employee_id = $1",
-                    employee.employee_id
+                    employee_id
                 )
             raise HTTPException(500, f"Workspace provisioning failed: {resp.text}")
 
-    return {"status": "onboarded", "employee_id": employee.employee_id}
+    fn_data = resp.json()
+    return {
+        "status": "onboarded",
+        "employee_id": employee_id,
+        "workspace_url": f"/workspace/{employee_id}",
+        "password": fn_data.get("password"),
+    }
 
 
 @app.delete("/api/employees/{employee_id}")
