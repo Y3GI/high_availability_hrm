@@ -34,6 +34,7 @@ async def get_db_pool():
         host=DB_HOST, port=DB_PORT,
         database=DB_NAME, user=DB_USER, password=password,
         min_size=2, max_size=10,
+        ssl=False,
     )
 
 
