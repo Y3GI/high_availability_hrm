@@ -314,7 +314,11 @@ async def workspace_auth(creds: WorkspaceLogin, response: Response):
         )
     if not row or not row["password_hash"]:
         raise HTTPException(401, "Invalid employee ID or password")
-    if not bcrypt.checkpw(creds.password.encode(), row["password_hash"].encode()):
+    loop = asyncio.get_event_loop()
+    valid = await loop.run_in_executor(
+        None, bcrypt.checkpw, creds.password.encode(), row["password_hash"].encode()
+    )
+    if not valid:
         raise HTTPException(401, "Invalid employee ID or password")
 
     cookie = sign_session(row["employee_id"])
@@ -354,12 +358,24 @@ async def proxy_workspace_http(request: Request, path: str = ""):
     excluded_req = {"host", "x-goog-authenticated-user-email", "x-goog-iap-jwt-assertion"}
     forward_headers = {k: v for k, v in request.headers.items() if k.lower() not in excluded_req}
 
-    async with httpx.AsyncClient(timeout=60.0) as client:
-        proxy_resp = await client.request(
-            method=request.method,
-            url=target,
-            headers=forward_headers,
-            content=await request.body(),
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            proxy_resp = await client.request(
+                method=request.method,
+                url=target,
+                headers=forward_headers,
+                content=await request.body(),
+            )
+    except httpx.ConnectError:
+        return HTMLResponse(
+            "<h1>Workspace unavailable</h1><p>Your workspace pod is not reachable. "
+            "It may still be starting — wait 30 seconds and refresh.</p>",
+            status_code=503,
+        )
+    except httpx.TimeoutException:
+        return HTMLResponse(
+            "<h1>Workspace timeout</h1><p>Connection to your workspace timed out. Try refreshing.</p>",
+            status_code=504,
         )
 
     excluded_resp = {"transfer-encoding", "connection"}
